@@ -4,20 +4,18 @@ This document tracks durable technical and design decisions. Every significant d
 
 ---
 
-## ADR-001: Adopt Recommended Next.js (App Router) + TypeScript Stack
+## Baseline Stack & Infrastructure Decisions
 
+### ADR-001: Adopt Recommended Next.js (App Router) + TypeScript Stack
 - **Status**: Accepted
 - **Context**: The assignment recommends Next.js (App Router) + React + TypeScript for frontend, and Node.js / Next API routes for backend.
 - **Decision**: Use Next.js 16 (App Router) with React 19 and TypeScript as a single unified full-stack repository.
 - **Consequences**:
   - Unified codebase for UI and server-side ingestion / token routes.
   - Zero CORS overhead for internal API routes.
-  - Direct compatibility with standard serverless hosting platforms (e.g. Vercel).
+  - Direct compatibility with standard cloud hosting platforms.
 
----
-
-## ADR-002: Test Runner Selection (Vitest)
-
+### ADR-002: Test Runner Selection (Vitest)
 - **Status**: Accepted
 - **Context**: The project requires unit and integration test infrastructure with minimal overhead and native TypeScript support.
 - **Decision**: Use Vitest as the test runner instead of Jest.
@@ -25,13 +23,237 @@ This document tracks durable technical and design decisions. Every significant d
   - Native ESM and TypeScript support without Babel or `ts-jest` boilerplate.
   - Fast execution and compatibility with modern Node/Next environments.
 
----
-
-## ADR-003: Backend Ephemeral Tokens for Realtime Voice Security
-
-- **Status**: Accepted
-- **Context**: The assignment strictly mandates: "API keys must never be exposed in the client. All Realtime connections must use ephemeral tokens or authenticated backend routes."
-- **Decision**: Implement a server-side route (`/api/session`) that uses the private `OPENAI_API_KEY` to request a short-lived ephemeral client session token from OpenAI's REST API (`/v1/realtime/sessions`), returning only the ephemeral token to the client.
+### ADR-003: Backend Ephemeral Tokens for Realtime Voice Security
+- **Status**: Accepted (Refined by **ADR-04** below)
+- **Context**: The assignment strictly mandates: *"API keys must never be exposed in the client. All Realtime connections must use ephemeral tokens or authenticated backend routes."*
+- **Decision**: Implement a server-side route that uses the private `OPENAI_API_KEY` to request a short-lived ephemeral client session token from OpenAI's REST API (`POST https://api.openai.com/v1/realtime/sessions`), returning only the ephemeral token to the client.
 - **Consequences**:
   - Private API keys remain strictly on the server.
   - Browser establishes direct WebRTC audio connection to OpenAI using only the ephemeral token.
+
+---
+
+## Core Architecture & Product Decisions (ADR-01 – ADR-12)
+
+### ADR-01: Unified Ingestion Contract & Source State Model
+- **Status**: Accepted
+- **Context**: `assignment.pdf` requires both PDF ($\le 25\text{ MB}$) and YouTube transcript ingestion and displaying extracted text in a collapsible preview. Under our approved Context Overflow Policy (**Option 2B**), ingestion must always succeed on valid sources so the full extracted text is available for the UI preview, while context capping (`48,000` characters) and token budgeting belong strictly to the context/session preparation layer.
+- **Decision**: Both `POST /api/ingest/pdf` and `POST /api/ingest/youtube` return a unified, discriminated JSON response (`IngestionResult`):
+  ```ts
+  export type IngestionSuccess = {
+    ok: true;
+    sourceType: "pdf" | "youtube";
+    title: string;           // Filename or YouTube video title/ID
+    text: string;            // Full normalized extracted text (never truncated at ingestion)
+    charCount: number;
+    estimatedTokens: number; // Math.ceil(charCount / 4)
+    metadata: {
+      pageCount?: number;
+      videoId?: string;
+      language?: string;
+    };
+  };
+
+  export type IngestionErrorCode =
+    | "INVALID_FILE_TYPE"
+    | "FILE_TOO_LARGE"
+    | "EMPTY_OR_SCANNED_PDF"
+    | "CORRUPTED_OR_ENCRYPTED_PDF"
+    | "INVALID_YOUTUBE_URL"
+    | "VIDEO_UNAVAILABLE"
+    | "CAPTIONS_UNAVAILABLE"
+    | "YOUTUBE_CLOUD_IP_BLOCKED"
+    | "EXTRACTION_TIMEOUT"
+    | "INTERNAL_ERROR";
+
+  export type IngestionError = {
+    ok: false;
+    code: IngestionErrorCode;
+    message: string;
+    retryable: boolean;
+  };
+
+  export type IngestionResult = IngestionSuccess | IngestionError;
+  ```
+- **Rationale**: A single normalized ingestion contract decouples the UI preview and Realtime session initialization from source-specific extraction mechanics, guarantees deterministic error handling, and ensures valid files always succeed at ingestion for full-text preview.
+- **Consequences**:
+  - `"CONTEXT_TOO_LARGE_FOR_REALTIME"` is excluded from `IngestionErrorCode`; ingestion routes never reject valid documents due to token length.
+  - Truncation and token budgeting are handled strictly in the context/session preparation layer (**ADR-05**).
+
+---
+
+### ADR-02: Server-Side Spatial PDF Extraction, 25 MB Hosting Target & Non-Negotiable No-OCR Boundary
+- **Status**: Accepted (Amended for Spatial Coordinate-Aware Extraction & Multi-Column Reconstruction; Includes **[CRITICAL-1] Option 1A**)
+- **Context**: `assignment.pdf` requires server-side extraction of PDFs up to `25 MB` working in the deployed app and evaluates Ingestion Quality at the `"4 - Exceptional"` level based on handling edge cases in PDF parsing. Naive stream-order extraction (such as basic `pdf-parse`) interleaves text horizontally across multi-column layouts and emits excessive blank lines over vertical voids left by embedded images. Additionally, Vercel Serverless Functions enforce a `4.5 MB` request body limit at their edge proxy, and scanned/image-only PDFs contain no text layer (OCR is out of scope).
+- **Decision**:
+  1. **Deployment Target (`[CRITICAL-1]` Option 1A)**: Target container hosting (Render / Railway) where the Node.js server natively accepts `25 MB` `multipart/form-data` uploads without external object-storage dependencies; document Vercel's `4.5 MB` serverless edge proxy limit in `README.md`.
+  2. **Runtime & Validation**: Run `POST /api/ingest/pdf` explicitly on the Node.js runtime (`export const runtime = "nodejs"`). Validate that an uploaded `File` is present, has MIME type `application/pdf` (or `.pdf` extension), begins with the `%PDF-` magic header, and has `0 < size <= 25 * 1024 * 1024` bytes (`26,214,400` bytes).
+  3. **Spatial Coordinate-Aware Extraction (`pdfjs-dist` / `pdfexcavator`)**:
+     - Replace naive stream-order extraction (e.g., basic `pdf-parse`) with spatial coordinate-aware extraction using `pdfjs-dist` / `pdfexcavator`.
+     - **Multi-Column Gutter Detection & Logical Reading Order**: Detect vertical column gutters and reconstruct logical reading order (reading Column 1 top-to-bottom in full before proceeding to Column 2 top-to-bottom) to prevent horizontal sentence interleaving across columns.
+     - **Vertical Void Collapsing**: Collapse large vertical voids caused by embedded images or figures into clean paragraph breaks (`\n\n`) rather than emitting runs of blank lines.
+  4. **No-OCR Enforcement**: If the extracted text after trimming whitespace contains fewer than **`20` non-whitespace characters**, reject with HTTP `422` and `code: "EMPTY_OR_SCANNED_PDF"` (*"This PDF contains no extractable text (it may be a scanned image). OCR is not supported; please upload a text-based PDF."*).
+  5. **Malformed / Encrypted PDFs**: Catch password-protected or corrupted PDF parser exceptions and return HTTP `422` with `code: "CORRUPTED_OR_ENCRYPTED_PDF"`.
+- **Rationale**: Spatial coordinate-aware extraction with column gutter detection and vertical void collapsing prevents garbled horizontal sentence interleaving on multi-column academic/business PDFs, while strict byte-size, magic-byte, and minimum-text-density checks enforce the 25 MB limit and the non-negotiable No-OCR boundary.
+- **Consequences**:
+  - Multi-column PDFs are extracted in coherent human reading order suitable for priming the Realtime voice assistant.
+  - Users uploading scanned PDFs receive an immediate, actionable error and can retry with another file.
+
+---
+
+### ADR-03: Server-Side YouTube Transcript Extraction & Cloud IP Block Mitigation
+- **Status**: Accepted
+- **Context**: YouTube offers no official API for third-party video captions and blocks cloud datacenter IPs on unofficial endpoints. Users also provide diverse YouTube URL formats.
+- **Decision**:
+  1. **URL Parser**: Parse and extract the 11-character YouTube `videoId` across all standard URL formats (`youtube.com/watch?v=`, `youtu.be/`, `youtube.com/shorts/`, `youtube.com/embed/`, `youtube.com/live/`, `m.youtube.com`). Reject non-YouTube domains or malformed IDs with HTTP `400` (`code: "INVALID_YOUTUBE_URL"`).
+  2. **Server-Side Transcript Fetcher**: Fetch captions server-side in `POST /api/ingest/youtube` (`export const runtime = "nodejs"`), preferring English (`en`/`en-US`) when multiple caption tracks exist and falling back to the first available manual or auto-generated track. Decode HTML entities (`&#39;`, `&amp;`, `&quot;`, etc.) and join segments into clean prose without raw XML tags or timestamps.
+  3. **Cloud IP Block Bonus & Fallback**:
+     - Support an optional `YOUTUBE_PROXY_URL` server environment variable so cloud deployments can route YouTube requests through a residential proxy.
+     - Distinguish between missing/disabled captions (`code: "CAPTIONS_UNAVAILABLE"`, HTTP `422`) and YouTube datacenter IP blocks / HTTP `403` / `429` / `LOGIN_REQUIRED` (`code: "YOUTUBE_CLOUD_IP_BLOCKED"`, HTTP `503`), returning a clear explanation and allowing retry.
+- **Rationale**: Combining multi-format URL parsing, optional proxy routing for cloud deployments, and distinct error codes for missing captions vs. datacenter IP blocks maximizes reliability while transparently handling YouTube's anti-bot restrictions.
+- **Consequences**:
+  - Works out of the box locally and on residential/proxied networks; fails gracefully with a self-explanatory error message on unproxied cloud IPs.
+
+---
+
+### ADR-04: Ephemeral Token Minting & Secret Isolation (`POST /api/realtime/session`)
+- **Status**: Accepted (Includes Resolution of **[CRITICAL-3] Option 3A** & `whisper-1` adjustment)
+- **Context**: Browser WebRTC sessions must authenticate via short-lived ephemeral tokens without exposing `OPENAI_API_KEY`, using official OpenAI Realtime session parameters.
+- **Decision**:
+  1. Implement `POST /api/realtime/session` on the Node.js runtime (`export const runtime = "nodejs"`).
+  2. Read `process.env.OPENAI_API_KEY` strictly on the server. If missing, return HTTP `500` with `{ ok: false, code: "SERVER_MISCONFIGURED", message: "..." }`.
+  3. Request an ephemeral session from `POST https://api.openai.com/v1/realtime/sessions` with:
+     - `model`: `process.env.OPENAI_REALTIME_MODEL || "gpt-4o-realtime-preview"`
+     - `modalities`: `["audio", "text"]`
+     - `voice`: `"alloy"` (or configurable default)
+     - `instructions`: Grounded system prompt built by the context layer (**ADR-05**)
+     - `input_audio_transcription`: `{ model: "whisper-1" }`
+     - `turn_detection`:
+       ```json
+       {
+         "type": "server_vad",
+         "threshold": 0.5,
+         "prefix_padding_ms": 300,
+         "silence_duration_ms": 500,
+         "create_response": true,
+         "interrupt_response": true
+       }
+       ```
+  4. Return `{ ok: true, ephemeralKey: data.client_secret.value, expiresAt: data.client_secret.expires_at, model }` with header `Cache-Control: no-store`.
+- **Rationale**: Minting single-use, `no-store` ephemeral tokens via `/v1/realtime/sessions` with `gpt-4o-realtime-preview` and `whisper-1` transcription keeps `OPENAI_API_KEY` server-only and matches official OpenAI Realtime parameters.
+- **Consequences**:
+  - Every WebRTC session receives a fresh ephemeral token pre-configured with Server VAD and `whisper-1` user speech transcription.
+
+---
+
+### ADR-05: Direct Context Priming Strategy & 48,000-Character Safe Cap
+- **Status**: Accepted (Includes Resolution of **[CRITICAL-2] Option 2B** & `48,000`-character cap adjustment)
+- **Context**: Extracted text must prime the Realtime session without chunking, summarization, or RAG. OpenAI Realtime `session.instructions` has a hard `16,384`-token limit (and `32,000` total context window), whereas `conversation.item.create` items can be evicted during rolling conversation truncation.
+- **Decision**:
+  1. **Full Text UI Preview**: Always display the complete, untruncated `text` returned by ingestion inside the collapsible UI preview (satisfying Review Script Step 2 *"Upload a PDF and confirm full text extraction"*).
+  2. **48,000-Character (`~12,000`-Token) Safe Realtime Context Cap**:
+     - Define `MAX_REALTIME_CONTEXT_CHARS = 48_000` (`~12,000` tokens, providing a safe `>4,000`-token buffer beneath OpenAI's `16,384` instruction token limit).
+     - If `text.length > 48_000`, slice the context passed to the Realtime session to `text.slice(0, 48_000)`, set `isContextTruncated = true`, and render a clear, non-blocking UI warning banner: *"This source exceeds the Realtime voice context limit (~12,000 tokens). Full text is shown in the preview, and the voice assistant is primed with the first 48,000 characters."*
+  3. **Pinning in `session.instructions`**: Embed the prepared context (`<= 48,000` chars) with source metadata (`title`, `sourceType`) and grounding rules inside `session.instructions` (sent during `/api/realtime/session` creation and reinforced via `session.update` on data channel open).
+- **Rationale**: Pinning up to `48,000` characters (`~12,000` tokens) in `session.instructions` guarantees a safe buffer under the `16,384` instruction token ceiling, prevents rolling conversation truncation from dropping the source mid-call, preserves full-text UI preview, and strictly obeys the no-chunking/no-RAG constraint.
+- **Consequences**:
+  - Large PDFs and long YouTube videos never crash session initialization while still displaying 100% of extracted text in the preview.
+
+---
+
+### ADR-06: WebRTC Session Lifecycle & Deterministic Resource Teardown
+- **Status**: Accepted
+- **Context**: Managing asynchronous browser states across ingestion, token minting, microphone capture, SDP exchange (`POST https://api.openai.com/v1/realtime?model=...`), active conversation, and teardown requires strict lifecycle control to prevent memory leaks or stuck mobile microphone indicators.
+- **Decision**:
+  1. Implement an explicit client session state machine:
+     - Primary states: `idle` -> `ingesting` -> `ready` -> `connecting` -> `connected` -> `reconnecting` -> `error`.
+     - Conversation flow sub-states (when `connected`): `listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`.
+  2. Enforce a deterministic `cleanupSession()` routine invoked on `"Stop"`, source switch (uploading a new PDF or submitting a new YouTube URL), or component unmount that synchronously:
+     - Calls `track.stop()` on all local `MediaStreamTrack`s.
+     - Pauses the remote `<audio>` element and sets `audioElement.srcObject = null`.
+     - Closes the `oai-events` `RTCDataChannel` and `RTCPeerConnection`.
+- **Rationale**: An explicit finite state machine with deterministic media-track and peer-connection cleanup prevents orphaned WebRTC sessions, ghost audio playback, and stuck mobile microphone indicators.
+- **Consequences**:
+  - Switching sources while in a call cleanly terminates the previous session and resets the conversation transcript before priming the new source.
+
+---
+
+### ADR-07: Speech Interruption (Barge-In) & Natural Follow-Up (Review Script Step 3)
+- **Status**: Accepted
+- **Context**: Review Script Step 3 mandates: *"Test on mobile: start a voice conversation, interrupt, follow up naturally."*
+- **Decision**:
+  1. **Automatic Voice Barge-In**: Rely on WebRTC + Server VAD (`interrupt_response: true`), which automatically stops OpenAI's outbound media stream and truncates unplayed server audio buffers when user speech is detected (`input_audio_buffer.speech_started`).
+  2. **Immediate Client State Sync**: Upon receiving `input_audio_buffer.speech_started` over `oai-events` while the assistant is speaking, immediately transition the conversation sub-state to `user_speaking` and finalize the interrupted assistant transcript item in the UI (marking it as interrupted rather than discarding already-spoken text).
+  3. **Manual Interrupt Control**: Provide a tappable **"Interrupt"** button while the assistant is speaking that sends `{ type: "response.cancel" }` and `{ type: "output_audio_buffer.clear" }` over `oai-events`.
+- **Rationale**: Combining WebRTC's native Server-VAD audio truncation with immediate UI state transitions and a manual `response.cancel` button guarantees responsive, natural barge-in on mobile devices.
+- **Consequences**:
+  - Users can interrupt the assistant either by speaking naturally or by tapping the Interrupt button.
+
+---
+
+### ADR-08: Real-Time Conversation Transcript Synchronization
+- **Status**: Accepted
+- **Context**: Asynchronous user input transcription (`whisper-1` via `conversation.item.input_audio_transcription.*`) runs in parallel with assistant response generation, so assistant transcript deltas often arrive before the user's completed speech transcription.
+- **Decision**:
+  1. Insert a user transcript placeholder (`role: "user"`, `status: "transcribing"`) keyed by `item_id` as soon as user speech commits (`input_audio_buffer.speech_stopped` / `conversation.item.created`), locking in chronological turn order before the assistant's reply bubble is created.
+  2. Update the user transcript item on `conversation.item.input_audio_transcription.delta` and finalize on `conversation.item.input_audio_transcription.completed`.
+  3. Stream assistant transcript text by handling both `response.audio_transcript.delta` and `response.output_audio_transcript.delta` (and `response.text.delta` / `response.output_text.delta`), finalizing on `.done`.
+- **Rationale**: Creating chronological turn placeholders on `item_id` creation prevents out-of-order chat bubbles when asynchronous `whisper-1` user transcription finishes after the assistant starts speaking.
+- **Consequences**:
+  - Conversation transcript always reflects true chronological turn order (`User` -> `Assistant`).
+
+---
+
+### ADR-09: Text-Based Chat Fallback When Microphone Is Unavailable
+- **Status**: Accepted
+- **Context**: `assignment.pdf` requires: *"If a microphone is unavailable, allow fallback to a text-based chat mode."*
+- **Decision**:
+  1. **Automatic Fallback on Mic Failure**: If `navigator.mediaDevices?.getUserMedia({ audio: true })` is unavailable or rejects (`NotAllowedError`, `NotFoundError`, `NotReadableError`, `OverconstrainedError`), do not fail the session. Transition automatically into **Text Fallback Mode** (`micStatus: "unavailable"`), display a clear status notice (*"Microphone unavailable — using text chat mode"*), and focus the text input bar.
+  2. **Mic-Less WebRTC Connection**: When connecting without a local microphone track, invoke `pc.addTransceiver("audio", { direction: "recvonly" })` prior to `pc.createOffer()` so the session still establishes the `oai-events` data channel and downstream model audio stream.
+  3. **Text Turn Dispatch**: Sending a text message dispatches `{ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } }` followed by `{ type: "response.create" }` over `oai-events` and appends the user message to the transcript.
+  4. **Mute Control**: When a microphone is present, toggling Mute sets `localAudioTrack.enabled = !isMuted` without dropping the WebRTC connection, while also allowing text input at any time.
+- **Rationale**: Using a `recvonly` WebRTC audio transceiver plus `oai-events` data channel messages when `getUserMedia` fails keeps the architecture unified on OpenAI Realtime WebRTC while providing a seamless text chat fallback.
+- **Consequences**:
+  - Evaluators or users without a microphone (or with denied permissions) can still converse with the document/video in real time.
+
+---
+
+### ADR-10: Poor Network Handling & Connection Resilience (Review Script Step 4)
+- **Status**: Accepted
+- **Context**: Review Script Step 4 states: *"Test under poor network conditions to assess stability."*
+- **Decision**:
+  1. **HTTP Fetch Timeouts**: Enforce explicit `AbortController` timeouts on ingestion (`30,000 ms`) and session token minting (`15,000 ms`), surfacing a retryable error state without losing the user's selected file or URL.
+  2. **10-Second ICE Disconnect Grace Period**:
+     - Monitor `pc.onconnectionstatechange` and `pc.oniceconnectionstatechange` (plus `window` `offline`/`online` events).
+     - When `iceConnectionState` or `connectionState` enters `"disconnected"`, transition UI state to `"reconnecting"` (*"Network unstable — attempting to recover..."*) and start a `10,000 ms` grace timer.
+     - If the connection recovers to `"connected"`/`"completed"` within `10,000 ms`, clear the timer and resume `"connected"` status seamlessly.
+  3. **Graceful Failure & One-Tap Reconnect**:
+     - If `connectionState`/`iceConnectionState` enters `"failed"` or the `10,000 ms` timer expires, run `cleanupSession()`, **preserve the existing conversation transcript and extracted source context in UI state**, transition to `"error"`, and show a **"Reconnect Voice Session"** button.
+  4. **Guarded Data Channel Sends**: Check `dataChannel.readyState === "open"` before calling `dataChannel.send(...)` to prevent unhandled `DOMException` crashes during packet loss or disconnect.
+- **Rationale**: Combining explicit fetch timeouts, a 10-second ICE recovery grace period, transcript-preserving session reconnection, and guarded data-channel sends ensures the app never crashes or loses user progress on flaky mobile networks.
+- **Consequences**:
+  - Brief mobile network blips self-heal automatically; severe drops preserve transcript history and recover in one tap.
+
+---
+
+### ADR-11: Mobile-First UI/UX & iOS Safari Autoplay Compliance (`~390 px`)
+- **Status**: Accepted
+- **Context**: `assignment.pdf` requires a simple, mobile-first design optimized for `~390 px` width screens with clear session controls and collapsible text preview.
+- **Decision**:
+  1. **Viewport Optimization**: Single-column mobile-first layout (`max-w-md mx-auto min-h-dvh flex flex-col overflow-x-hidden`) optimized for `390 px` width screens.
+  2. **Collapsible Source Preview**: Render the extracted text in a collapsible panel displaying source title, character count, and estimated token count (plus the truncation warning banner if `charCount > 48,000` per **ADR-05**), collapsible so it does not push the live transcript and controls off-screen.
+  3. **Touch Targets & iOS Zoom Prevention**: Place primary controls (**Start/Stop Voice Chat**, **Mute/Unmute**, **Interrupt**, and **Text Chat Input**) in a sticky bottom dock with minimum `44x44 px` touch targets and `font-size: 16px` (`text-base`) on all form inputs to prevent iOS Safari auto-zoom.
+  4. **Mobile Audio Autoplay Unlock**: Attach and configure the remote `<audio autoPlay playsInline>` element synchronously within the user click gesture of **"Start Voice Chat"**.
+- **Rationale**: Designing specifically around `390 px` `dvh` layout, collapsible source preview, `44 px` touch targets, `16 px` inputs, and gesture-bound `<audio playsInline>` eliminates mobile Safari/Chrome layout and audio traps.
+- **Consequences**:
+  - Smooth, native-feeling mobile voice experience on iOS Safari and Android Chrome.
+
+---
+
+### ADR-12: Stateless Storage Scope & Bounded In-Memory Caching
+- **Status**: Accepted
+- **Context**: `assignment.pdf` states *"In-memory or lightweight database (e.g., SQLite) is sufficient. No persistent user authentication required."*
+- **Decision**: Keep backend routes stateless without SQLite/filesystem writes, using a lightweight bounded in-memory LRU/TTL cache (e.g., max 25 entries, 15-minute TTL) keyed by YouTube `videoId` or PDF SHA-256 hash to accelerate repeated demos while maintaining compatibility with ephemeral/read-only cloud filesystems.
+- **Rationale**: Stateless API routes with a bounded in-memory cache satisfy all functional requirements while remaining 100% compatible with both serverless and container cloud hosts.
+- **Consequences**:
+  - Zero database setup friction and faster repeat ingestion during live demos.

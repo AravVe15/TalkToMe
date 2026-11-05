@@ -20,3 +20,11 @@ This document captures operational gotchas, environment quirks, and technical in
 ## 3. Realtime Audio & Browser Autoplay Nuances (To Monitor)
 
 - Modern mobile browsers (iOS Safari, Android Chrome) enforce strict autoplay policies on WebRTC remote audio streams. Remote audio elements must be attached and played in direct response to user gesture ("Start Voice Chat").
+
+
+---
+
+## 4. Spatial Coordinate-Aware PDF Extraction vs. Naive Stream Order
+
+- **Architectural Blind Spot**: Initial planning defaulted to naive PDF stream extraction (e.g., `pdf-parse` / stream-order text concatenation), failing to anticipate horizontal text interleaving on multi-column layouts and excessive vertical whitespace around embedded images.
+- **Human-in-the-Loop Correction**: Corrected during architectural review (`ADR-02` / `AC-02.6`) to require spatial coordinate-aware extraction (`pdfjs-dist` / `pdfexcavator`) with multi-column vertical gutter detection (reconstructing logical reading order: Column 1 top-to-bottom before Column 2) and collapsing large vertical voids caused by embedded images into clean paragraph breaks (`\n\n`) to satisfy the `"4 - Exceptional"` Ingestion Quality rubric.

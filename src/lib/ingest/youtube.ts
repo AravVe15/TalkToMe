@@ -131,26 +131,82 @@ export function decodeHtmlEntities(rawText: string): string {
 
 /**
  * Strips XML/HTML tags and timestamps, decodes HTML entities, and joins caption segments
- * into clean, single-spaced prose.
+ * into clean, single-spaced prose. Supports standard XML (<text>), srv3 XML (<p><s>...</s></p>),
+ * and json3 ({ events: [...] }).
  */
 export function cleanTranscriptText(rawXmlOrText: string): string {
   if (!rawXmlOrText) {
     return "";
   }
 
-  // 1. Strip XML declarations and outer/inner XML tags, replacing tag boundaries with spaces
+  const trimmed = rawXmlOrText.trim();
+
+  // 1. Support json3 transcript format ({ "events": [ { "segs": [ { "utf8": ... } ] } ] })
+  if (trimmed.startsWith("{") && trimmed.includes('"events"')) {
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        events?: Array<{ segs?: Array<{ utf8?: string }> }>;
+      };
+      if (Array.isArray(parsed.events)) {
+        const parts: string[] = [];
+        for (const ev of parsed.events) {
+          if (Array.isArray(ev.segs)) {
+            for (const seg of ev.segs) {
+              if (seg.utf8) {
+                parts.push(seg.utf8);
+              }
+            }
+          }
+        }
+        const combined = decodeHtmlEntities(parts.join(" "));
+        return combined.replace(/\s+/g, " ").trim();
+      }
+    } catch {
+      // Fall through if json3 parsing fails
+    }
+  }
+
+  // 2. Support srv3 format (<p t="ms" d="ms"><s>word</s>...</p>)
+  if (trimmed.includes("<p") && trimmed.includes("<s")) {
+    const pRegex = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+    const pMatches: string[] = [];
+    let pMatch: RegExpExecArray | null;
+    while ((pMatch = pRegex.exec(trimmed)) !== null) {
+      const inner = pMatch[1];
+      let pText = "";
+      const sRegex = /<s\b[^>]*>([\s\S]*?)<\/s>/gi;
+      let sMatch: RegExpExecArray | null;
+      let hasS = false;
+      while ((sMatch = sRegex.exec(inner)) !== null) {
+        hasS = true;
+        pText += sMatch[1];
+      }
+      if (!hasS) {
+        pText = inner.replace(/<[^>]+>/g, " ");
+      }
+      if (pText.trim()) {
+        pMatches.push(pText.trim());
+      }
+    }
+    if (pMatches.length > 0) {
+      const decoded = decodeHtmlEntities(pMatches.join(" "));
+      return decoded.replace(/\s+/g, " ").trim();
+    }
+  }
+
+  // 3. Classic format (<text start="..." dur="...">...) and general XML
   const withoutXmlTags = rawXmlOrText
     .replace(/<\?xml[^>]*\?>/gi, " ")
     .replace(/<\/?(?:transcript|timedtext|body|head|p|s|text)\b[^>]*>/gi, " ")
     .replace(/<[^>]+>/g, " ");
 
-  // 2. Decode HTML entities
+  // 4. Decode HTML entities
   const decoded = decodeHtmlEntities(withoutXmlTags);
 
-  // 3. Strip any inline HTML formatting tags that were entity-encoded (e.g. &lt;b&gt;...&lt;/b&gt;)
+  // 5. Strip any inline HTML formatting tags that were entity-encoded (e.g. &lt;b&gt;...&lt;/b&gt;)
   const withoutInlineTags = decoded.replace(/<\/?[a-zA-Z][^>]*>/g, "");
 
-  // 4. Collapse whitespace into clean single spaces
+  // 6. Collapse whitespace into clean single spaces
   return withoutInlineTags.replace(/\s+/g, " ").trim();
 }
 
@@ -171,7 +227,7 @@ function hasUsableSpeechContent(cleanedText: string): boolean {
 }
 
 function isBotOrCloudBlockBody(body: string): boolean {
-  return /Before you continue to YouTube|complete captcha to continue|Sign in to confirm you’re not a bot|Sign in to confirm you're not a bot|LOGIN_REQUIRED|g-recaptcha|bot detection/i.test(
+  return /Before you continue to YouTube|complete captcha to continue|Sign in to confirm you’re not a bot|Sign in to confirm you're not a bot|LOGIN_REQUIRED|g-recaptcha|bot detection|automated queries|unusual traffic|<title>Sorry\.\.\.<\/title>/i.test(
     body
   );
 }
@@ -179,6 +235,67 @@ function isBotOrCloudBlockBody(body: string): boolean {
 interface CaptionTrackItem {
   baseUrl?: string;
   languageCode?: string;
+  kind?: string;
+  name?: { simpleText?: string; runs?: Array<{ text?: string }> };
+}
+
+async function fetchTracksFromInnerTube(
+  videoId: string,
+  options?: { proxyUrl?: string },
+  signal?: AbortSignal
+): Promise<{ tracks: CaptionTrackItem[]; title: string | null }> {
+  const innertubeUrl = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
+  const targetUrl = options?.proxyUrl
+    ? `${options.proxyUrl.replace(/\/$/, "")}/${innertubeUrl}`
+    : innertubeUrl;
+
+  try {
+    const res = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14)",
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "ANDROID",
+            clientVersion: "20.10.38",
+            hl: "en",
+            gl: "US",
+          },
+        },
+        videoId,
+      }),
+      signal,
+    });
+
+    if (!res.ok) {
+      return { tracks: [], title: null };
+    }
+
+    const data = (await res.json()) as {
+      captions?: {
+        playerCaptionsTracklistRenderer?: {
+          captionTracks?: CaptionTrackItem[];
+        };
+      };
+      videoDetails?: {
+        title?: string;
+      };
+    };
+
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    const title = data?.videoDetails?.title ?? null;
+
+    if (Array.isArray(tracks)) {
+      return { tracks, title };
+    }
+  } catch {
+    // Non-fatal fallback to watch page scraping
+  }
+
+  return { tracks: [], title: null };
 }
 
 function extractCaptionTracksFromWatchHtml(html: string): {
@@ -255,15 +372,15 @@ function extractCaptionTracksFromWatchHtml(html: string): {
 }
 
 /**
- * Fetches and cleans the YouTube transcript for a validated 11-character videoId.
+ * Fetches and cleans the YouTube transcript for a validated 11-character videoId or full URL.
  * Distinguishes between missing/disabled captions (CAPTIONS_UNAVAILABLE) and
  * cloud datacenter IP blocks / bot challenges (YOUTUBE_CLOUD_IP_BLOCKED).
  */
 export async function fetchYouTubeTranscript(
-  videoId: string,
+  videoIdOrUrl: string,
   options?: { proxyUrl?: string; timeoutMs?: number }
 ): Promise<TranscriptFetchResult> {
-  if (!videoId || typeof videoId !== "string" || !videoId.trim()) {
+  if (!videoIdOrUrl || typeof videoIdOrUrl !== "string" || !videoIdOrUrl.trim()) {
     throw new YouTubeIngestionError(
       "INVALID_YOUTUBE_URL",
       "Invalid YouTube video ID.",
@@ -271,13 +388,28 @@ export async function fetchYouTubeTranscript(
     );
   }
 
+  const rawTrimmed = videoIdOrUrl.trim();
+  let videoId = rawTrimmed;
+  if (rawTrimmed.includes("/") || rawTrimmed.includes(".")) {
+    const parsedId = parseYouTubeVideoId(rawTrimmed);
+    if (!parsedId) {
+      throw new YouTubeIngestionError(
+        "INVALID_YOUTUBE_URL",
+        "Invalid YouTube video ID or URL.",
+        false
+      );
+    }
+    videoId = parsedId;
+  }
+
   const timeoutMs = options?.timeoutMs ?? 30_000;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  const effectiveProxy = options?.proxyUrl || process.env.YOUTUBE_PROXY_URL;
   const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const targetUrl = options?.proxyUrl
-    ? `${options.proxyUrl.replace(/\/$/, "")}/${watchUrl}`
+  const targetUrl = effectiveProxy
+    ? `${effectiveProxy.replace(/\/$/, "")}/${watchUrl}`
     : watchUrl;
 
   try {
@@ -336,9 +468,29 @@ export async function fetchYouTubeTranscript(
       );
     }
 
-    // Case 3: Standard YouTube watch HTML containing player captionTracks
-    const { tracks, title } = extractCaptionTracksFromWatchHtml(bodyText);
-    if (tracks.length === 0) {
+    // Case 3: Extract caption tracks from watch HTML
+    const { tracks: watchTracks, title: watchTitle } = extractCaptionTracksFromWatchHtml(bodyText);
+
+    // Also attempt InnerTube Android player API to get caption tracks without &exp=xpe PoToken gating
+    const { tracks: innerTubeTracks, title: innerTubeTitle } = await fetchTracksFromInnerTube(
+      videoId,
+      effectiveProxy ? { proxyUrl: effectiveProxy } : undefined,
+      controller.signal
+    );
+
+    const title = watchTitle || innerTubeTitle || `YouTube Video (${videoId})`;
+
+    // Combine tracks: InnerTube Android tracks first (to avoid &exp=xpe empty 200 responses), followed by watchTracks
+    const allTracks = [...innerTubeTracks, ...watchTracks];
+
+    if (allTracks.length === 0) {
+      if (isBotOrCloudBlockBody(bodyText)) {
+        throw new YouTubeIngestionError(
+          "YOUTUBE_CLOUD_IP_BLOCKED",
+          "YouTube blocked the server cloud IP with a bot challenge. Configure a residential proxy via YOUTUBE_PROXY_URL or run locally.",
+          true
+        );
+      }
       throw new YouTubeIngestionError(
         "CAPTIONS_UNAVAILABLE",
         "No captions or transcripts are available for this YouTube video.",
@@ -346,80 +498,105 @@ export async function fetchYouTubeTranscript(
       );
     }
 
-    const selectedTrack =
-      tracks.find((t) => t.languageCode === "en" || t.languageCode?.startsWith("en")) ?? tracks[0];
+    // Rank candidate tracks:
+    // 1. Manual English (en / en-US without kind: asr)
+    // 2. Auto-generated English (en with kind: asr)
+    // 3. Other manual language tracks
+    // 4. Other auto-generated tracks
+    const isEn = (lang?: string) => Boolean(lang === "en" || lang?.toLowerCase().startsWith("en"));
+    const manualEn = allTracks.filter((t) => isEn(t.languageCode) && !t.kind);
+    const asrEn = allTracks.filter((t) => isEn(t.languageCode) && t.kind === "asr");
+    const manualOther = allTracks.filter((t) => !t.kind && !isEn(t.languageCode));
+    const asrOther = allTracks.filter((t) => t.kind === "asr" && !isEn(t.languageCode));
 
-    if (!selectedTrack?.baseUrl) {
-      throw new YouTubeIngestionError(
-        "CAPTIONS_UNAVAILABLE",
-        "Captions track URL is missing for this YouTube video.",
-        true
-      );
-    }
+    const candidateTracks = [...manualEn, ...asrEn, ...manualOther, ...asrOther];
 
-    // SSRF hardening: verify caption track URL host belongs to youtube.com
-    let parsedCaptionUrl: URL;
-    try {
-      parsedCaptionUrl = new URL(selectedTrack.baseUrl);
-    } catch {
-      throw new YouTubeIngestionError(
-        "CAPTIONS_UNAVAILABLE",
-        "Invalid caption track URL for this YouTube video.",
-        true
-      );
-    }
+    let encounteredBlock = false;
+    let encounteredEmptyOrBlocked = false;
 
-    const captionHost = parsedCaptionUrl.hostname.toLowerCase();
-    if (!captionHost.endsWith(".youtube.com") && captionHost !== "youtube.com") {
-      throw new YouTubeIngestionError(
-        "CAPTIONS_UNAVAILABLE",
-        "Untrusted caption track URL host for this YouTube video.",
-        true
-      );
-    }
-
-    const captionTargetUrl = options?.proxyUrl
-      ? `${options.proxyUrl.replace(/\/$/, "")}/${selectedTrack.baseUrl}`
-      : selectedTrack.baseUrl;
-
-    const captionRes = await fetch(captionTargetUrl, {
-      method: "GET",
-      headers: {
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      signal: controller.signal,
-    });
-
-    const captionXml = await captionRes.text();
-    if (!captionRes.ok) {
-      if (captionRes.status === 403 || captionRes.status === 429) {
-        throw new YouTubeIngestionError(
-          "YOUTUBE_CLOUD_IP_BLOCKED",
-          `YouTube blocked caption retrieval from this cloud IP (HTTP ${captionRes.status}). Configure a residential proxy via YOUTUBE_PROXY_URL.`,
-          true
-        );
+    for (const track of candidateTracks) {
+      if (!track?.baseUrl) {
+        continue;
       }
+
+      // SSRF hardening: verify caption track URL host belongs to youtube.com
+      let parsedCaptionUrl: URL;
+      try {
+        parsedCaptionUrl = new URL(track.baseUrl);
+      } catch {
+        continue;
+      }
+
+      const captionHost = parsedCaptionUrl.hostname.toLowerCase();
+      if (!captionHost.endsWith(".youtube.com") && captionHost !== "youtube.com") {
+        continue;
+      }
+
+      const captionTargetUrl = effectiveProxy
+        ? `${effectiveProxy.replace(/\/$/, "")}/${track.baseUrl}`
+        : track.baseUrl;
+
+      try {
+        const captionRes = await fetch(captionTargetUrl, {
+          method: "GET",
+          headers: {
+            "Accept-Language": "en-US,en;q=0.9",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            Referer: watchUrl,
+          },
+          signal: controller.signal,
+        });
+
+        if (!captionRes.ok) {
+          if (captionRes.status === 403 || captionRes.status === 429) {
+            encounteredBlock = true;
+          }
+          continue;
+        }
+
+        const captionBody = await captionRes.text();
+
+        if (isBotOrCloudBlockBody(captionBody)) {
+          encounteredBlock = true;
+          continue;
+        }
+
+        if (!captionBody || !captionBody.trim()) {
+          encounteredEmptyOrBlocked = true;
+          continue;
+        }
+
+        const cleaned = cleanTranscriptText(captionBody);
+        if (!hasUsableSpeechContent(cleaned)) {
+          continue;
+        }
+
+        return {
+          text: cleaned,
+          language: track.languageCode ?? "en",
+          title,
+        };
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          throw err;
+        }
+      }
+    }
+
+    if (encounteredBlock || (encounteredEmptyOrBlocked && allTracks.length > 0)) {
       throw new YouTubeIngestionError(
-        "CAPTIONS_UNAVAILABLE",
-        "Failed to retrieve captions track for this YouTube video.",
+        "YOUTUBE_CLOUD_IP_BLOCKED",
+        "YouTube blocked caption retrieval from this cloud IP address (HTTP 429 or BotGuard challenge). Configure a residential proxy via YOUTUBE_PROXY_URL or run locally.",
         true
       );
     }
 
-    const cleaned = cleanTranscriptText(captionXml);
-    if (!hasUsableSpeechContent(cleaned)) {
-      throw new YouTubeIngestionError(
-        "CAPTIONS_UNAVAILABLE",
-        "Captions or transcript contain no usable spoken text for this YouTube video.",
-        true
-      );
-    }
-
-    return {
-      text: cleaned,
-      language: selectedTrack.languageCode ?? "en",
-      title: title || `YouTube Video (${videoId})`,
-    };
+    throw new YouTubeIngestionError(
+      "CAPTIONS_UNAVAILABLE",
+      "Captions or transcript contain no usable spoken text for this YouTube video.",
+      true
+    );
   } catch (err: unknown) {
     if (err instanceof YouTubeIngestionError) {
       throw err;
@@ -440,3 +617,8 @@ export async function fetchYouTubeTranscript(
     clearTimeout(timeoutId);
   }
 }
+
+/**
+ * Primary export and alias for fetchYouTubeTranscript.
+ */
+export const extractYouTubeTranscript = fetchYouTubeTranscript;

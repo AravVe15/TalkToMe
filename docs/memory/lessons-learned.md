@@ -58,3 +58,23 @@ This document captures operational gotchas, environment quirks, and technical in
 - **InnerTube Android Client Bypass**: Fetching player metadata via InnerTube API (`POST https://www.youtube.com/youtubei/v1/player`) using the Android client context (`clientName: "ANDROID"`, `clientVersion: "20.10.38"`) returns caption tracks whose `baseUrl` lacks the `&exp=xpe` token requirement, enabling direct caption track retrieval on residential or proxied connections without client attestation.
 - **Shared Datacenter / Campus Egress Rate Limiting**: Shared or cloud IP addresses (such as university wireless egress or datacenter subnets) frequently receive HTTP 429 or HTTP 200 HTML bot challenges (`automated queries`, `<title>Sorry...</title>`) when accessing Google's `timedtext` endpoint. Detecting these HTML bodies and status codes triggers `YOUTUBE_CLOUD_IP_BLOCKED` so operators can configure `YOUTUBE_PROXY_URL`.
 - **Multi-Track Fallback & Modern Syllable Format Support (`srv3` / `json3`)**: Caption endpoints can return classic XML (`<text>`), Syllable/word-level XML (`srv3`, `<p t="..."><s>...</s></p>`), or JSON3 events. Reconstructing speech requires joining syllables within `<p>` tags before collapsing whitespace. The extractor ranks candidates (manual English -> auto-generated English -> other manual -> other auto-generated) and falls back sequentially across candidate tracks if any track returns an empty response.
+
+---
+
+## 8. `pdfjs-dist` in Node.js Server Environments: Fake Worker, Font Assets & Buffer Transfer
+
+- **Next.js Bundled Fake Worker Resolution**:
+  - In Next.js App Router server runtimes, `pdfjs-dist` attempts to load a fake worker by dynamically importing `./pdf.worker.mjs` relative to `.next/server/app/.../route.js`. Because Next.js does not emit `pdf.worker.mjs` in that directory, this fails with `Cannot find module .../pdf.worker.mjs` and causes an unhandled 500 error.
+  - *Fix*: Import `* as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs"` and register it directly on `globalThis.pdfjsWorker` alongside `pdfjsLib.GlobalWorkerOptions.workerSrc`. `pdfjs-dist`'s internal `#mainThreadWorkerMessageHandler` detects `globalThis.pdfjsWorker.WorkerMessageHandler` and skips the dynamic import entirely.
+- **Standard Fonts & Predefined Adobe CMaps (`standardFontDataUrl` / `cMapUrl`)**:
+  - When real-world PDFs utilize standard PostScript/PDF fonts (Helvetica, Times, Courier, Symbol) or CMap character encodings, `pdfjs-dist` uses Node's internal `fs.promises.readFile(url)` to load them.
+  - If `standardFontDataUrl` or `cMapUrl` are missing, `pdfjs-dist` throws `"Ensure that the standardFontDataUrl API parameter is provided"` or `"Ensure that the cMapUrl and cMapPacked API parameters are provided"`.
+  - *Fix*: Dynamically resolve `pdfjs-dist/package.json` at runtime via `createRequire`, normalising paths to forward slashes with required trailing slashes (`standard_fonts/` and `cmaps/`), and pass them to `pdfjsLib.getDocument()`.
+- **ArrayBuffer Detachment During Worker Transfer**:
+  - `pdfjs-dist` transfers the underlying `ArrayBuffer` of its `data` parameter to the worker/evaluator context. When an `ArrayBuffer` is transferred, it is permanently detached.
+  - If the same `buffer` or its underlying `ArrayBuffer` is subsequently accessed (e.g. for SHA-256 caching, file conversion, or logging), Node throws `TypeError: Cannot perform ArrayBuffer.prototype.slice on a detached ArrayBuffer`.
+  - *Fix*: In `extractPdfText`, clone the buffer into an independent `Uint8Array` before passing it to `pdfjsLib.getDocument({ data: bufferCopy })`.
+- **Operator List Fallback Guarding**:
+  - `page.getTextContent()` is the canonical API for text and coordinate extraction. `page.getOperatorList()` renders graphic instructions; on real-world PDFs with kerning or letter-level positioning, `OPS.moveText` produces spaced characters.
+  - Blindly substituting operator list text when `opText.length > pageText.length + 50` corrupts real-world PDFs by inserting spaces/newlines between characters.
+  - *Fix*: Guard operator list substitution so it only replaces spatial text if the operator list contains significantly more substantive non-whitespace text (`opNonWs > Math.max(pageNonWs * 1.5, pageNonWs + 200)`), recovering clipped unwrapped text without corrupting standard PDFs.

@@ -9,8 +9,66 @@
  * - Corrupted, truncated, and encrypted PDF detection (AC-02.4)
  */
 
+import path from "node:path";
+import fs from "node:fs";
+import { createRequire } from "node:module";
+// @ts-expect-error - pdfjs-dist does not bundle TypeScript declaration for pdf.worker.mjs
+import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { IngestionErrorCode } from "@/types/ingest";
+
+// Ensure pdfjs-dist fake worker is configured for Node.js server environments
+if (typeof globalThis !== "undefined") {
+  const g = globalThis as unknown as { pdfjsWorker?: unknown };
+  if (!g.pdfjsWorker) {
+    g.pdfjsWorker = pdfjsWorker;
+  }
+}
+if (pdfjsLib.GlobalWorkerOptions) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "pdfjs-dist/legacy/build/pdf.worker.mjs";
+}
+
+/**
+ * Resolves absolute filesystem paths to pdfjs-dist standard fonts and cmaps directories
+ * with trailing slashes, required for Node.js server environments.
+ */
+function getStandardFontAndCMapUrls(): {
+  standardFontDataUrl?: string;
+  cMapUrl?: string;
+} {
+  try {
+    let baseDir: string | undefined;
+
+    try {
+      const req = createRequire(path.join(process.cwd(), "package.json"));
+      const pkgPath = req.resolve("pdfjs-dist/package.json");
+      baseDir = path.dirname(pkgPath);
+    } catch {
+      try {
+        const req = createRequire(import.meta.url);
+        const pkgPath = req.resolve("pdfjs-dist/package.json");
+        baseDir = path.dirname(pkgPath);
+      } catch {
+        const fallback = path.join(process.cwd(), "node_modules", "pdfjs-dist");
+        if (fs.existsSync(fallback)) {
+          baseDir = fallback;
+        }
+      }
+    }
+
+    if (baseDir) {
+      const fontsDir = path.join(baseDir, "standard_fonts").split(path.sep).join("/") + "/";
+      const cmapsDir = path.join(baseDir, "cmaps").split(path.sep).join("/") + "/";
+      return {
+        standardFontDataUrl: fontsDir,
+        cMapUrl: cmapsDir,
+      };
+    }
+  } catch {
+    // Gracefully ignore if asset paths cannot be located
+  }
+  return {};
+}
 
 export const MAX_PDF_SIZE_BYTES = 26_214_400; // 25 MB (25 * 1024 * 1024)
 export const MIN_PDF_TEXT_CHARS = 20;
@@ -261,8 +319,6 @@ function extractTextFromOperatorList(opList: PageOperatorList): string {
           }
         }
       }
-    } else if (fn === pdfjsLib.OPS.moveText || fn === pdfjsLib.OPS.setLeadingMoveText) {
-      parts.push("\n");
     }
   }
   return parts.join("").replace(/\n{3,}/g, "\n\n").trim();
@@ -283,8 +339,9 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
     );
   }
 
-  // Reject truncated PDFs that lack an %%EOF marker or have an unclosed stream
-  const tailOffset = Math.max(0, buffer.byteLength - 2048);
+  // Reject truncated PDFs that lack an %%EOF marker or have an unclosed stream.
+  // Search within the final 8 KB (or entire buffer) to accommodate incremental updates and trailing whitespace.
+  const tailOffset = Math.max(0, buffer.byteLength - 8192);
   const tailText = new TextDecoder("latin1").decode(buffer.subarray(tailOffset));
   if (!tailText.includes("%%EOF")) {
     throw new PdfIngestionError(
@@ -298,11 +355,20 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
   let doc: pdfjsLib.PDFDocumentProxy | undefined;
 
   try {
+    // Clone buffer bytes into a fresh Uint8Array so pdfjs-dist worker transfer does not
+    // mutate or detach the caller's underlying ArrayBuffer.
+    const bufferCopy = new Uint8Array(buffer.byteLength);
+    bufferCopy.set(buffer);
+
+    const assetUrls = getStandardFontAndCMapUrls();
     const loadingTask = pdfjsLib.getDocument({
-      data: buffer,
+      data: bufferCopy,
       useSystemFonts: true,
       disableFontFace: true,
       verbosity: 0,
+      cMapPacked: true,
+      ...(assetUrls.standardFontDataUrl ? { standardFontDataUrl: assetUrls.standardFontDataUrl } : {}),
+      ...(assetUrls.cMapUrl ? { cMapUrl: assetUrls.cMapUrl } : {}),
     });
     doc = await loadingTask.promise;
   } catch (err: unknown) {
@@ -339,9 +405,31 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
     const pageTexts: string[] = [];
 
     for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-      const page = await doc.getPage(pageNum);
+      let page: pdfjsLib.PDFPageProxy;
+      try {
+        page = await doc.getPage(pageNum);
+      } catch {
+        throw new PdfIngestionError(
+          "CORRUPTED_OR_ENCRYPTED_PDF",
+          `Failed to load page ${pageNum}. The PDF structure may be corrupted.`,
+          422,
+          false
+        );
+      }
+
       const viewport = page.getViewport({ scale: 1.0 });
-      const textContent = await page.getTextContent();
+      let textContent: Awaited<ReturnType<pdfjsLib.PDFPageProxy["getTextContent"]>>;
+      try {
+        textContent = await page.getTextContent();
+      } catch {
+        throw new PdfIngestionError(
+          "CORRUPTED_OR_ENCRYPTED_PDF",
+          `Failed to extract text from page ${pageNum}.`,
+          422,
+          false
+        );
+      }
+
       const spatialItems: SpatialTextItem[] = [];
 
       for (const item of textContent.items) {
@@ -358,12 +446,19 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
 
       let pageText = reconstructSpatialPageText(spatialItems, viewport.width);
 
-      // In case long unwrapped lines extend past page boundaries and are dropped by
-      // pdfjs-dist's internal viewBox clipping, extract complete text from the operator list.
-      const opList = await page.getOperatorList();
-      const opText = extractTextFromOperatorList(opList);
-      if (opText.length > pageText.length + 50) {
-        pageText = opText;
+      // In case long unwrapped text lines extend past page boundaries and are clipped by
+      // pdfjs-dist's internal viewBox filter, recover complete text from the operator list
+      // only when the operator list contains significantly more substantive text.
+      try {
+        const opList = await page.getOperatorList();
+        const opText = extractTextFromOperatorList(opList);
+        const pageNonWs = pageText.replace(/\s+/g, "").length;
+        const opNonWs = opText.replace(/\s+/g, "").length;
+        if (opNonWs > Math.max(pageNonWs * 1.5, pageNonWs + 200)) {
+          pageText = opText;
+        }
+      } catch {
+        // Gracefully ignore operator list decoding failures
       }
 
       if (pageText.length > 0) {

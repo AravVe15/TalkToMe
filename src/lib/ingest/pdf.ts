@@ -11,21 +11,54 @@
 
 import path from "node:path";
 import fs from "node:fs";
-import { createRequire } from "node:module";
-// @ts-expect-error - pdfjs-dist does not bundle TypeScript declaration for pdf.worker.mjs
-import * as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import { pathToFileURL } from "node:url";
+import type * as PdfjsTypes from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { IngestionErrorCode } from "@/types/ingest";
 
-// Ensure pdfjs-dist fake worker is configured for Node.js server environments
-if (typeof globalThis !== "undefined") {
-  const g = globalThis as unknown as { pdfjsWorker?: unknown };
-  if (!g.pdfjsWorker) {
-    g.pdfjsWorker = pdfjsWorker;
+let pdfjsPromise: Promise<typeof PdfjsTypes> | null = null;
+
+/**
+ * Dynamically loads pdfjs-dist and its worker via native Node ESM import(),
+ * bypassing Next.js Webpack bundling so pdfjs-dist's internal `var __webpack_exports__`
+ * declarations do not collide with Next.js's eval-source-map module wrapper.
+ */
+async function getPdfJs(): Promise<typeof PdfjsTypes> {
+  if (!pdfjsPromise) {
+    pdfjsPromise = (async () => {
+      const baseDir = path.join(process.cwd(), "node_modules", "pdfjs-dist");
+      const workerPath = path.join(baseDir, "legacy", "build", "pdf.worker.mjs");
+      const pdfPath = path.join(baseDir, "legacy", "build", "pdf.mjs");
+
+      const workerUrl = pathToFileURL(workerPath).href;
+      const pdfUrl = pathToFileURL(pdfPath).href;
+
+      const pdfjsWorker = (await import(
+        /* webpackIgnore: true */
+        /* @vite-ignore */
+        workerUrl
+      )) as unknown;
+
+      if (typeof globalThis !== "undefined") {
+        const g = globalThis as unknown as { pdfjsWorker?: unknown };
+        if (!g.pdfjsWorker) {
+          g.pdfjsWorker = pdfjsWorker;
+        }
+      }
+
+      const pdfjsLib = (await import(
+        /* webpackIgnore: true */
+        /* @vite-ignore */
+        pdfUrl
+      )) as typeof PdfjsTypes;
+
+      if (pdfjsLib.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+      }
+
+      return pdfjsLib;
+    })();
   }
-}
-if (pdfjsLib.GlobalWorkerOptions) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "pdfjs-dist/legacy/build/pdf.worker.mjs";
+  return pdfjsPromise;
 }
 
 /**
@@ -37,26 +70,8 @@ function getStandardFontAndCMapUrls(): {
   cMapUrl?: string;
 } {
   try {
-    let baseDir: string | undefined;
-
-    try {
-      const req = createRequire(path.join(process.cwd(), "package.json"));
-      const pkgPath = req.resolve("pdfjs-dist/package.json");
-      baseDir = path.dirname(pkgPath);
-    } catch {
-      try {
-        const req = createRequire(import.meta.url);
-        const pkgPath = req.resolve("pdfjs-dist/package.json");
-        baseDir = path.dirname(pkgPath);
-      } catch {
-        const fallback = path.join(process.cwd(), "node_modules", "pdfjs-dist");
-        if (fs.existsSync(fallback)) {
-          baseDir = fallback;
-        }
-      }
-    }
-
-    if (baseDir) {
+    const baseDir = path.join(process.cwd(), "node_modules", "pdfjs-dist");
+    if (fs.existsSync(baseDir)) {
       const fontsDir = path.join(baseDir, "standard_fonts").split(path.sep).join("/") + "/";
       const cmapsDir = path.join(baseDir, "cmaps").split(path.sep).join("/") + "/";
       return {
@@ -284,24 +299,27 @@ export function reconstructSpatialPageText(
   return sections.filter(Boolean).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-type PageOperatorList = Awaited<ReturnType<pdfjsLib.PDFPageProxy["getOperatorList"]>>;
+type PageOperatorList = Awaited<ReturnType<PdfjsTypes.PDFPageProxy["getOperatorList"]>>;
 
 /**
  * Extracts raw glyph text from standard PDF.js operator lists when long unwrapped text
  * lines extend beyond the page width and are clipped by pdfjs-dist's internal viewBox filter.
  */
-function extractTextFromOperatorList(opList: PageOperatorList): string {
+function extractTextFromOperatorList(
+  opList: PageOperatorList,
+  ops: typeof PdfjsTypes.OPS
+): string {
   const parts: string[] = [];
   for (let i = 0; i < opList.fnArray.length; i++) {
     const fn = opList.fnArray[i];
     const args = opList.argsArray[i];
     if (
-      fn === pdfjsLib.OPS.showText ||
-      fn === pdfjsLib.OPS.showSpacedText ||
-      fn === pdfjsLib.OPS.nextLineShowText ||
-      fn === pdfjsLib.OPS.nextLineSetSpacingShowText
+      fn === ops.showText ||
+      fn === ops.showSpacedText ||
+      fn === ops.nextLineShowText ||
+      fn === ops.nextLineSetSpacingShowText
     ) {
-      if (fn === pdfjsLib.OPS.nextLineShowText || fn === pdfjsLib.OPS.nextLineSetSpacingShowText) {
+      if (fn === ops.nextLineShowText || fn === ops.nextLineSetSpacingShowText) {
         parts.push("\n");
       }
       const glyphs = args[0];
@@ -352,7 +370,8 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
     );
   }
 
-  let doc: pdfjsLib.PDFDocumentProxy | undefined;
+  const pdfjsLib = await getPdfJs();
+  let doc: PdfjsTypes.PDFDocumentProxy | undefined;
 
   try {
     // Clone buffer bytes into a fresh Uint8Array so pdfjs-dist worker transfer does not
@@ -405,7 +424,7 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
     const pageTexts: string[] = [];
 
     for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-      let page: pdfjsLib.PDFPageProxy;
+      let page: PdfjsTypes.PDFPageProxy;
       try {
         page = await doc.getPage(pageNum);
       } catch {
@@ -418,7 +437,7 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
       }
 
       const viewport = page.getViewport({ scale: 1.0 });
-      let textContent: Awaited<ReturnType<pdfjsLib.PDFPageProxy["getTextContent"]>>;
+      let textContent: Awaited<ReturnType<PdfjsTypes.PDFPageProxy["getTextContent"]>>;
       try {
         textContent = await page.getTextContent();
       } catch {
@@ -451,7 +470,7 @@ export async function extractPdfText(buffer: Uint8Array): Promise<PdfExtractionR
       // only when the operator list contains significantly more substantive text.
       try {
         const opList = await page.getOperatorList();
-        const opText = extractTextFromOperatorList(opList);
+        const opText = extractTextFromOperatorList(opList, pdfjsLib.OPS);
         const pageNonWs = pageText.replace(/\s+/g, "").length;
         const opNonWs = opText.replace(/\s+/g, "").length;
         if (opNonWs > Math.max(pageNonWs * 1.5, pageNonWs + 200)) {

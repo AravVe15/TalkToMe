@@ -61,20 +61,23 @@ This document captures operational gotchas, environment quirks, and technical in
 
 ---
 
-## 8. `pdfjs-dist` in Node.js Server Environments: Fake Worker, Font Assets & Buffer Transfer
+## 8. `pdfjs-dist` in Node.js & Next.js Server Environments: Webpack Hoisting Collision, Fake Worker, Font Assets & Buffer Transfer
 
+- **Next.js Webpack `var __webpack_exports__` Hoisting Collision (`TypeError: Object.defineProperty called on non-object`)**:
+  - Both `node_modules/pdfjs-dist/legacy/build/pdf.mjs` and `pdf.worker.mjs` were pre-bundled by Mozilla using Webpack and contain top-level `var __webpack_exports__ = {};` declarations.
+  - When Next.js Webpack bundles `pdfjs-dist` in dev mode (`eval-source-map` devtool), it wraps each module in `((__unused_webpack_module, __webpack_exports__, __webpack_require__) => { eval("__webpack_require__.r(__webpack_exports__); ... var __webpack_exports__ = {};"); })`. Inside `eval()`, `var __webpack_exports__` hoists to the top of the function scope as `undefined`, shadowing the `__webpack_exports__` parameter! Consequently, `__webpack_require__.r(__webpack_exports__)` calls `Object.defineProperty(undefined, Symbol.toStringTag, { value: 'Module' })`, crashing `/api/ingest/pdf` with `TypeError: Object.defineProperty called on non-object`.
+  - *Fix*: Use `import type * as PdfjsTypes from "pdfjs-dist/legacy/build/pdf.mjs"` for TypeScript types and lazily load `pdf.worker.mjs` and `pdf.mjs` at runtime via `await import(/* webpackIgnore: true */ /* @vite-ignore */ fileUrl)` using `pathToFileURL(path.join(process.cwd(), "node_modules", "pdfjs-dist", "legacy", "build", ...))`. The `/* webpackIgnore: true */` directive instructs Next.js Webpack to preserve native Node.js ESM `import()`, completely bypassing Webpack bundling without modifying `next.config.ts`.
+- **Next.js Webpack `module.createRequire` Static Analysis Warning**:
+  - Passing a dynamic expression (`createRequire(path.join(process.cwd(), "package.json"))`) causes Next.js Webpack to emit `module.createRequire failed parsing argument` warnings and evaluate the call to `undefined`.
+  - *Fix*: Avoid `createRequire` completely and resolve `node_modules/pdfjs-dist` paths directly using `path.join(process.cwd(), "node_modules", "pdfjs-dist")` and `fs.existsSync()`.
 - **Next.js Bundled Fake Worker Resolution**:
-  - In Next.js App Router server runtimes, `pdfjs-dist` attempts to load a fake worker by dynamically importing `./pdf.worker.mjs` relative to `.next/server/app/.../route.js`. Because Next.js does not emit `pdf.worker.mjs` in that directory, this fails with `Cannot find module .../pdf.worker.mjs` and causes an unhandled 500 error.
-  - *Fix*: Import `* as pdfjsWorker from "pdfjs-dist/legacy/build/pdf.worker.mjs"` and register it directly on `globalThis.pdfjsWorker` alongside `pdfjsLib.GlobalWorkerOptions.workerSrc`. `pdfjs-dist`'s internal `#mainThreadWorkerMessageHandler` detects `globalThis.pdfjsWorker.WorkerMessageHandler` and skips the dynamic import entirely.
+  - In Next.js App Router server runtimes, `pdfjs-dist` attempts to load a fake worker by dynamically importing `./pdf.worker.mjs`. If not pre-registered, this fails with `Cannot find module .../pdf.worker.mjs`.
+  - *Fix*: Dynamically import `pdf.worker.mjs` via `/* webpackIgnore: true */` and register it directly on `globalThis.pdfjsWorker` alongside `pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl`.
 - **Standard Fonts & Predefined Adobe CMaps (`standardFontDataUrl` / `cMapUrl`)**:
-  - When real-world PDFs utilize standard PostScript/PDF fonts (Helvetica, Times, Courier, Symbol) or CMap character encodings, `pdfjs-dist` uses Node's internal `fs.promises.readFile(url)` to load them.
-  - If `standardFontDataUrl` or `cMapUrl` are missing, `pdfjs-dist` throws `"Ensure that the standardFontDataUrl API parameter is provided"` or `"Ensure that the cMapUrl and cMapPacked API parameters are provided"`.
-  - *Fix*: Dynamically resolve `pdfjs-dist/package.json` at runtime via `createRequire`, normalising paths to forward slashes with required trailing slashes (`standard_fonts/` and `cmaps/`), and pass them to `pdfjsLib.getDocument()`.
+  - When real-world PDFs utilize standard PostScript/PDF fonts (Helvetica, Times, Courier, Symbol) or CMap character encodings, `pdfjs-dist` uses Node's `fs.promises.readFile(url)` to load them.
+  - *Fix*: Resolve `node_modules/pdfjs-dist/standard_fonts/` and `node_modules/pdfjs-dist/cmaps/` with forward slashes and required trailing slashes, and pass them to `pdfjsLib.getDocument()`.
 - **ArrayBuffer Detachment During Worker Transfer**:
-  - `pdfjs-dist` transfers the underlying `ArrayBuffer` of its `data` parameter to the worker/evaluator context. When an `ArrayBuffer` is transferred, it is permanently detached.
-  - If the same `buffer` or its underlying `ArrayBuffer` is subsequently accessed (e.g. for SHA-256 caching, file conversion, or logging), Node throws `TypeError: Cannot perform ArrayBuffer.prototype.slice on a detached ArrayBuffer`.
+  - `pdfjs-dist` transfers the underlying `ArrayBuffer` of its `data` parameter to the worker/evaluator context, permanently detaching the caller's `ArrayBuffer` (`TypeError: Cannot perform ArrayBuffer.prototype.slice on a detached ArrayBuffer`).
   - *Fix*: In `extractPdfText`, clone the buffer into an independent `Uint8Array` before passing it to `pdfjsLib.getDocument({ data: bufferCopy })`.
 - **Operator List Fallback Guarding**:
-  - `page.getTextContent()` is the canonical API for text and coordinate extraction. `page.getOperatorList()` renders graphic instructions; on real-world PDFs with kerning or letter-level positioning, `OPS.moveText` produces spaced characters.
-  - Blindly substituting operator list text when `opText.length > pageText.length + 50` corrupts real-world PDFs by inserting spaces/newlines between characters.
-  - *Fix*: Guard operator list substitution so it only replaces spatial text if the operator list contains significantly more substantive non-whitespace text (`opNonWs > Math.max(pageNonWs * 1.5, pageNonWs + 200)`), recovering clipped unwrapped text without corrupting standard PDFs.
+  - `page.getTextContent()` is the canonical API for text and coordinate extraction. Guard operator list substitution so it only replaces spatial text if the operator list contains significantly more substantive non-whitespace text (`opNonWs > Math.max(pageNonWs * 1.5, pageNonWs + 200)`), recovering clipped unwrapped text without corrupting standard PDFs.

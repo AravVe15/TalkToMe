@@ -21,13 +21,14 @@ Core flow:
 
 ### 2.1 Ingestion
 - **PDF Upload**:
-  - Accept PDF file uploads up to `25 MB` (`26,214,400` bytes).
-  - Text extraction must occur server-side (`POST /api/ingest/pdf` on Node.js runtime) using spatial coordinate-aware extraction (`pdfjs-dist` / `pdfexcavator`) with multi-column gutter detection (reading Column 1 top-to-bottom before Column 2) and collapsing large vertical voids caused by embedded images into clean paragraph breaks (`\n\n`).
+  - Accept PDF file uploads up to `25 MB` (`26,214,400` bytes). Rejects oversized requests early via `Content-Length` header check or body size with HTTP `413`.
+  - Validate MIME types accepting `application/pdf`, `application/x-pdf`, or `application/octet-stream` with a `.pdf` extension.
+  - Text extraction must occur server-side (`POST /api/ingest/pdf` on Node.js runtime) using spatial coordinate-aware extraction (`pdfjs-dist` legacy build) operating on standard unmodified page viewports (`612pt`) with multi-column gutter detection (reading Column 1 top-to-bottom before Column 2) and collapsing large vertical voids caused by embedded images into clean paragraph breaks (`\n\n`).
   - PDF ingestion must work in the deployed application (hosted on a container platform such as Render/Railway for native 25 MB payload support; Vercel's 4.5 MB serverless body limit is documented in `README.md`).
   - **Fixed Boundary (No OCR)**: Only text-based PDFs are supported. Scanned/image-only or blank PDFs must return a clear, typed error (`EMPTY_OR_SCANNED_PDF`) and allow the user to retry.
 - **YouTube Ingestion**:
   - Accept a YouTube video URL with accessible transcript or captions (`POST /api/ingest/youtube` on Node.js runtime).
-  - Transcript retrieval must occur server-side.
+  - Transcript retrieval must occur server-side with SSRF hostname validation on caption track URLs (restricted to `*.youtube.com` and `youtube.com`) and support for `YOUTUBE_PROXY_URL` routing across all outbound requests.
   - Local demonstration is acceptable if cloud provider IP ranges are blocked by YouTube; deployed functionality via optional `YOUTUBE_PROXY_URL` is supported as a bonus, with clear `YOUTUBE_CLOUD_IP_BLOCKED` error reporting when unproxied cloud IPs are blocked.
 - **Preview**:
   - Always display the full, untruncated extracted text to the user in a collapsible preview format before and during the conversation.
@@ -54,6 +55,8 @@ Core flow:
 ### 2.5 Security
 - `OPENAI_API_KEY` must **never** be exposed in client code, browser bundles, or network responses.
 - All Realtime connections must authenticate exclusively using short-lived ephemeral tokens minted by `POST /api/realtime/session`.
+- **Early Request Boundary & Denial-of-Service Defense**: PDF upload routes inspect the `Content-Length` header early to reject oversized requests (`> 25 MB`) before buffering multipart form-data streams into server memory.
+- **SSRF Protection**: Outbound server-side requests for YouTube caption tracks must validate that target hostnames strictly match `youtube.com` or end with `.youtube.com` before issuing network requests. Outbound requests route via `YOUTUBE_PROXY_URL` when configured.
 
 ---
 
@@ -77,18 +80,19 @@ The `test-writer` agent MUST author automated unit and integration tests verifyi
   - `retryable`: boolean.
 
 ### AC-02: Server-Side Spatial PDF Extraction & No-OCR Boundary (`ADR-02`)
-- **`AC-02.1`**: Uploading a PDF file larger than `25 MB` (`> 26,214,400` bytes) to `POST /api/ingest/pdf` returns HTTP `413` with `code: "FILE_TOO_LARGE"` and `retryable: true`.
-- **`AC-02.2`**: Uploading a missing file, empty (`0` byte) file, non-PDF MIME/extension, or file lacking the `%PDF-` magic header returns HTTP `400` with `code: "INVALID_FILE_TYPE"`.
+- **`AC-02.1`**: Uploading a PDF file larger than `25 MB` (`> 26,214,400` bytes) to `POST /api/ingest/pdf` returns HTTP `413` with `code: "FILE_TOO_LARGE"` and `retryable: true`. The route enforces this boundary early via the `Content-Length` header check prior to buffering multipart body streams into memory, as well as checking `file.size` and `buffer.byteLength`.
+- **`AC-02.2`**: Uploading a missing file, empty (`0` byte) file, unsupported MIME type (accepting `application/pdf`, `application/x-pdf`, or `application/octet-stream` with a `.pdf` extension), or file lacking the `%PDF-` magic header returns HTTP `400` with `code: "INVALID_FILE_TYPE"`.
 - **`AC-02.3`**: Uploading a scanned/image-only or blank PDF whose extracted text has `< 20` non-whitespace characters returns HTTP `422` with `code: "EMPTY_OR_SCANNED_PDF"`, a message stating that OCR is not supported and a text-based PDF is required, and `retryable: true`.
 - **`AC-02.4`**: Uploading a password-protected or corrupted PDF that throws a parser exception returns HTTP `422` with `code: "CORRUPTED_OR_ENCRYPTED_PDF"`.
 - **`AC-02.5`**: Uploading a valid multi-page text-based PDF ($\le 25\text{ MB}$) extracts and concatenates text across all pages in reading order and returns HTTP `200` with `ok: true` and `metadata.pageCount`.
-- **`AC-02.6`**: Spatial coordinate-aware extraction (`pdfjs-dist` / `pdfexcavator`) detects multi-column vertical gutters and reconstructs logical column reading order (extracting Column 1 top-to-bottom in full before Column 2 top-to-bottom) without horizontally interleaving sentences across columns, and collapses large vertical voids caused by embedded images into clean paragraph breaks (`\n\n`) rather than emitting multiple blank lines.
+- **`AC-02.6`**: Spatial coordinate-aware extraction (`pdfjs-dist` legacy build) detects multi-column vertical gutters and reconstructs logical column reading order (extracting Column 1 top-to-bottom in full before Column 2 top-to-bottom) without horizontally interleaving sentences across columns, and collapses large vertical voids caused by embedded images into clean paragraph breaks (`\n\n`) rather than emitting multiple blank lines. All spatial column calculations operate on the genuine document viewport (`612pt`) without modifying PDF binary buffers (e.g. MediaBox rewrites) or applying monkey-patches to worker viewport bounds.
 
 ### AC-03: Server-Side YouTube Transcript Extraction (`ADR-03`)
 - **`AC-03.1`**: The YouTube URL parser extracts the 11-character `videoId` from `youtube.com/watch?v=`, `youtu.be/`, `youtube.com/shorts/`, `youtube.com/embed/`, `youtube.com/live/`, and `m.youtube.com` URLs (ignoring extra query params such as `&t=` or `&list=`), and rejects non-YouTube URLs or invalid IDs with HTTP `400` and `code: "INVALID_YOUTUBE_URL"`.
 - **`AC-03.2`**: A valid YouTube video with available captions returns HTTP `200` (`ok: true`) with HTML entities (`&#39;`, `&amp;`, `&quot;`, etc.) decoded and caption segments joined into clean readable text without XML tags or timestamps.
 - **`AC-03.3`**: A YouTube video with disabled or missing captions returns HTTP `422` with `code: "CAPTIONS_UNAVAILABLE"` and `retryable: true`.
 - **`AC-03.4`**: When YouTube blocks the server IP (`HTTP 403`, `HTTP 429`, `LOGIN_REQUIRED`, or anti-bot challenge), `POST /api/ingest/youtube` returns HTTP `503` with `code: "YOUTUBE_CLOUD_IP_BLOCKED"` and a clear explanation of the cloud IP restriction.
+- **`AC-03.5`**: Server-side caption track fetching enforces SSRF protection by verifying that parsed caption `baseUrl` hostnames strictly resolve to `youtube.com` or `*.youtube.com` before initiating outbound fetch requests (rejecting untrusted hostnames with `CAPTIONS_UNAVAILABLE`), and routes through `YOUTUBE_PROXY_URL` if configured.
 
 ### AC-04: Ephemeral Token Minting & Secret Isolation (`ADR-04`)
 - **`AC-04.1`**: `OPENAI_API_KEY` is read exclusively on the server and never appears in client bundles, `NEXT_PUBLIC_*` variables, or response payloads. If `OPENAI_API_KEY` is missing, `POST /api/realtime/session` returns HTTP `500` with `code: "SERVER_MISCONFIGURED"`.

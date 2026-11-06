@@ -99,6 +99,99 @@ startxref
   return new TextEncoder().encode(pdfString);
 }
 
+export const TWO_COLUMN_TEXT = {
+  col1: [
+    "Col 1: Voice agent intro.",
+    "Col 1: System pipeline.",
+    "Col 1: Core ingestion spec.",
+  ],
+  col2: [
+    "Col 2: Performance metrics.",
+    "Col 2: Latency evaluation.",
+    "Col 2: Concluding summary.",
+  ],
+};
+
+/**
+ * Creates a genuine two-column PDF buffer (page width 612, height 792).
+ * Column 1 text is positioned at x = 72 (width ~150 pt, well within 200 pt).
+ * Column 2 text is positioned at x = 320 (width ~150 pt, ending around x ≈ 470, strictly within 612-wide page).
+ * The content stream deliberately interleaves Column 1 and Column 2 lines
+ * (Row 1 Col 1 -> Row 1 Col 2 -> Row 2 Col 1 -> Row 2 Col 2 -> Row 3 Col 1 -> Row 3 Col 2)
+ * so that naive stream-order extraction will fail, and only spatial coordinate-aware
+ * gutter detection correctly extracts all Column 1 lines before Column 2 lines.
+ */
+export function createTwoColumnPdfBuffer(
+  col1Lines: string[] = TWO_COLUMN_TEXT.col1,
+  col2Lines: string[] = TWO_COLUMN_TEXT.col2
+): Uint8Array {
+  const streamContent = `BT
+/F1 10 Tf
+72 700 Td
+(${col1Lines[0]}) Tj
+ET
+BT
+/F1 10 Tf
+320 700 Td
+(${col2Lines[0]}) Tj
+ET
+BT
+/F1 10 Tf
+72 650 Td
+(${col1Lines[1]}) Tj
+ET
+BT
+/F1 10 Tf
+320 650 Td
+(${col2Lines[1]}) Tj
+ET
+BT
+/F1 10 Tf
+72 600 Td
+(${col1Lines[2]}) Tj
+ET
+BT
+/F1 10 Tf
+320 600 Td
+(${col2Lines[2]}) Tj
+ET`;
+
+  const pdfString = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length ${streamContent.length} >>
+stream
+${streamContent}
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000300 00000 n 
+0000000220 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+500
+%%EOF`;
+
+  return new TextEncoder().encode(pdfString);
+}
+
 /**
  * Minimal PDF buffer whose extracted text is blank or < 20 non-whitespace characters (scanned/empty PDF).
  */
@@ -184,23 +277,24 @@ export function createPngBuffer(): Uint8Array {
 
 /**
  * Generates an oversized PDF buffer representation exceeding 25 MB (26,214,401 bytes).
- * Uses a small Uint8Array with overridden size property on File to avoid massive memory allocations in tests.
+ * Allocates an actual 26,214,401 byte buffer so file.size, arrayBuffer().byteLength,
+ * and multipart body readers perceive the real size > 25 MB without special-casing.
  */
 export function createOversizedPdfFile(filename: string = "oversized.pdf"): File {
-  const dummyBuffer = new TextEncoder().encode("%PDF-1.4\nOversized test payload");
-  const file = new File([dummyBuffer], filename, { type: "application/pdf" });
-  Object.defineProperty(file, "size", { value: 26_214_401, configurable: true });
-  return file;
+  const buf = new Uint8Array(26_214_401);
+  const header = new TextEncoder().encode("%PDF-1.4\n");
+  buf.set(header, 0);
+  return new File([buf], filename, { type: "application/pdf" });
 }
 
 /**
  * Generates an exact 25 MB boundary PDF file (26,214,400 bytes).
  */
 export function createBoundary25MbPdfFile(filename: string = "boundary25mb.pdf"): File {
-  const dummyBuffer = new TextEncoder().encode("%PDF-1.4\nBoundary 25MB test payload");
-  const file = new File([dummyBuffer], filename, { type: "application/pdf" });
-  Object.defineProperty(file, "size", { value: 26_214_400, configurable: true });
-  return file;
+  const buf = new Uint8Array(26_214_400);
+  const header = new TextEncoder().encode("%PDF-1.4\n");
+  buf.set(header, 0);
+  return new File([buf], filename, { type: "application/pdf" });
 }
 
 // --- YouTube Fixtures ---

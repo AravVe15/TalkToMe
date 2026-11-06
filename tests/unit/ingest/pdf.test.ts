@@ -26,6 +26,8 @@ import type { IngestionSuccess, IngestionError } from "@/types/ingest";
 import {
   createValidPdfBuffer,
   createMultiPagePdfBuffer,
+  createTwoColumnPdfBuffer,
+  TWO_COLUMN_TEXT,
   createScannedOrEmptyPdfBuffer,
   createCorruptedPdfBuffer,
   createTruncatedStreamPdfBuffer,
@@ -173,16 +175,39 @@ describe("PDF Ingestion Engine (AC-01, AC-02, AC-12)", () => {
     });
 
     it("AC-02.6: reconstructs logical column reading order in multi-column layout without horizontal interleaving", async () => {
-      // Synthesize a two-column PDF buffer or invoke spatial coordinate aware extractor
-      // Column 1: "Introduction to voice agents." / "Architecture overview."
-      // Column 2: "Experimental results." / "Future directions."
-      // If naive stream order were used: "Introduction to voice agents. Experimental results. Architecture overview. Future directions."
-      // Correct spatial reading order: "Introduction to voice agents.\nArchitecture overview.\n\nExperimental results.\nFuture directions."
-      const validText = "Introduction to voice agents. Architecture overview. Experimental results. Future directions.";
-      const buffer = createValidPdfBuffer(validText);
+      // Genuine two-column PDF (page width 612, height 792) with Column 1 at x=72 and Column 2 at x=320 (strictly within 612-wide page).
+      // Raw stream order is intentionally interleaved:
+      // (Row 1 Col 1 -> Row 1 Col 2 -> Row 2 Col 1 -> Row 2 Col 2 -> Row 3 Col 1 -> Row 3 Col 2).
+      // Spatial coordinate-aware extraction must reconstruct logical reading order such that
+      // ALL text in Column 1 appears in the extracted output before ANY text in Column 2.
+      const twoColBuffer = createTwoColumnPdfBuffer();
+      const result = await extractPdfText(twoColBuffer);
 
-      const result = await extractPdfText(buffer);
-      expect(result.text.length).toBeGreaterThanOrEqual(MIN_PDF_TEXT_CHARS);
+      // Verify that all Column 1 lines appear in the extracted output
+      for (const line of TWO_COLUMN_TEXT.col1) {
+        expect(result.text).toContain(line);
+      }
+
+      // Verify that all Column 2 lines appear in the extracted output
+      for (const line of TWO_COLUMN_TEXT.col2) {
+        expect(result.text).toContain(line);
+      }
+
+      // Compute index positions of all Column 1 and Column 2 lines
+      const col1Indices = TWO_COLUMN_TEXT.col1.map((line) => result.text.indexOf(line));
+      const col2Indices = TWO_COLUMN_TEXT.col2.map((line) => result.text.indexOf(line));
+
+      const maxCol1Index = Math.max(...col1Indices);
+      const minCol2Index = Math.min(...col2Indices);
+
+      // Assert that ALL text in Column 1 appears in the extracted output before ANY text in Column 2
+      expect(maxCol1Index).toBeLessThan(minCol2Index);
+
+      // Also verify top-to-bottom reading order within each column
+      expect(col1Indices[0]).toBeLessThan(col1Indices[1]);
+      expect(col1Indices[1]).toBeLessThan(col1Indices[2]);
+      expect(col2Indices[0]).toBeLessThan(col2Indices[1]);
+      expect(col2Indices[1]).toBeLessThan(col2Indices[2]);
     });
 
     it("AC-02.6: collapses large vertical voids from embedded images into clean paragraph breaks (\\n\\n)", async () => {
@@ -296,6 +321,12 @@ describe("PDF Ingestion Engine (AC-01, AC-02, AC-12)", () => {
     it("AC-02.1: returns HTTP 413 with FILE_TOO_LARGE and retryable: true when file exceeds 25 MB", async () => {
       const oversizedFile = createOversizedPdfFile();
       const req = createFormDataRequest(oversizedFile);
+
+      // Properly mock req.formData() returning the genuine oversized file (size: 26,214,401 bytes)
+      // so production code can perform a real file.size / buffer length check without special-casing
+      const mockFormData = new FormData();
+      mockFormData.append("file", oversizedFile);
+      vi.spyOn(req, "formData").mockResolvedValue(mockFormData);
 
       const res = await pdfHandler(req);
       expect(res.status).toBe(413);

@@ -9,6 +9,8 @@ import { describe, it, expect } from "vitest";
 import {
   createValidPdfBuffer,
   createMultiPagePdfBuffer,
+  createTwoColumnPdfBuffer,
+  TWO_COLUMN_TEXT,
   createScannedOrEmptyPdfBuffer,
   createCorruptedPdfBuffer,
   createTruncatedStreamPdfBuffer,
@@ -41,6 +43,16 @@ describe("Ingestion Test Fixtures Integrity", () => {
       const content = new TextDecoder().decode(buf);
       expect(content).toMatch(/^%PDF-/);
       expect(content).toContain("/Count 2");
+    });
+
+    it("createTwoColumnPdfBuffer begins with %PDF- and contains interleaved column lines with x=72 and x=320 coordinates within 612-wide page", () => {
+      const buf = createTwoColumnPdfBuffer();
+      const content = new TextDecoder().decode(buf);
+      expect(content).toMatch(/^%PDF-/);
+      expect(content).toContain("72 700 Td");
+      expect(content).toContain("320 700 Td");
+      expect(content).toContain(TWO_COLUMN_TEXT.col1[0]);
+      expect(content).toContain(TWO_COLUMN_TEXT.col2[0]);
     });
 
     it("createScannedOrEmptyPdfBuffer begins with %PDF- and has minimal stream", () => {

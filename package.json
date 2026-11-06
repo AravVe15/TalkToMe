@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "next": "15.5.29",
+    "pdfjs-dist": "5.4.624",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },

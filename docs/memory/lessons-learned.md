@@ -81,3 +81,22 @@ This document captures operational gotchas, environment quirks, and technical in
   - *Fix*: In `extractPdfText`, clone the buffer into an independent `Uint8Array` before passing it to `pdfjsLib.getDocument({ data: bufferCopy })`.
 - **Operator List Fallback Guarding**:
   - `page.getTextContent()` is the canonical API for text and coordinate extraction. Guard operator list substitution so it only replaces spatial text if the operator list contains significantly more substantive non-whitespace text (`opNonWs > Math.max(pageNonWs * 1.5, pageNonWs + 200)`), recovering clipped unwrapped text without corrupting standard PDFs.
+
+---
+
+## 9. Ambient Type Shims (`tests/types/shims.d.ts`) vs. Path-Aliased `src/` Modules
+
+- **Ambient Module Precedence in `tsc`**:
+  - When `test-writer` authors `declare module "@/types/realtime"` or `declare module "@/lib/realtime/context"` in `tests/types/shims.d.ts` (which is included by `tsconfig.json`'s `"**/*.ts"`), TypeScript resolves `@/...` imports against the ambient declarations in `shims.d.ts` rather than the path-mapped files in `src/`.
+  - *Implication*: Production modules in `src/` must export the exact interface names, union literals (e.g. `RealtimeSessionErrorCode`), and parameter/return shapes declared in `tests/types/shims.d.ts`, and callers importing via `@/...` must handle union return types (such as `PreparedContext | string`) declared in the ambient shim so `npm run typecheck` (`tsc --noEmit`) succeeds cleanly.
+
+---
+
+## 10. OpenAI Realtime Ephemeral Token Endpoint: Beta `/v1/realtime/sessions` Retirement vs. GA `/v1/realtime/client_secrets`
+
+- **Live API Behavior (`404 Invalid URL` & `400 model_not_found`)**:
+  - OpenAI's live API retired the Beta `POST https://api.openai.com/v1/realtime/sessions` endpoint (which now returns HTTP `404` with `{"error": {"message": "Invalid URL (POST /v1/realtime/sessions)", "type": "invalid_request_error"}}`) and the preview model `gpt-4o-realtime-preview` (which returns HTTP `400` with `code: "model_not_found"`).
+  - Initially, `POST /api/realtime/session` mapped any non-401/403/429/5xx upstream status (including `404`) to a generic `400 UPSTREAM_ERROR` (`"OpenAI Realtime rejected the session request parameters."`), making the `404 Invalid URL` response appear as a `turn_detection` parameter error.
+- **Dual-Compatible Production Solution**:
+  - `POST /api/realtime/session` first dispatches the ADR-04 `/v1/realtime/sessions` request; if OpenAI responds with `404`/`400` (`Invalid URL` or `model_not_found`), it automatically falls back to the GA `POST https://api.openai.com/v1/realtime/client_secrets` endpoint with model `"gpt-realtime"` and the GA nested `{ session: { type: "realtime", model: "gpt-realtime", instructions, audio: { input: { transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500, create_response: true, interrupt_response: true } }, output: { voice } } } }` payload.
+  - Response parsing supports both Beta `{ client_secret: { value, expires_at }, model }` and GA `{ value, expires_at, session: { model } }` shapes, returning a live `ek_...` ephemeral key with `HTTP 200`.

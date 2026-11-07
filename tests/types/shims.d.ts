@@ -184,3 +184,59 @@ declare module "@/app/api/realtime/session/route" {
   export const runtime: string;
   export function POST(req: Request): Promise<Response>;
 }
+
+declare module "@/lib/realtime/connection" {
+  export type RealtimeConnectionState =
+    | "idle"
+    | "ingesting"
+    | "ready"
+    | "connecting"
+    | "connected"
+    | "reconnecting"
+    | "error";
+
+  export type RealtimeConversationState =
+    | "listening"
+    | "user_speaking"
+    | "assistant_thinking"
+    | "assistant_speaking";
+
+  export interface RealtimeConnectionOptions {
+    audioElement?: HTMLAudioElement | null;
+    onStateChange?: (state: RealtimeConnectionState) => void;
+    onConversationStateChange?: (state: RealtimeConversationState) => void;
+    onError?: (error: Error | string) => void;
+    onEvent?: (event: unknown) => void;
+    fetchToken?: () => Promise<{ ephemeralKey: string; model?: string }>;
+    reconnectTimeoutMs?: number;
+  }
+
+  export interface RealtimeSessionResources {
+    peerConnection?: RTCPeerConnection | null;
+    dataChannel?: RTCDataChannel | null;
+    localStream?: MediaStream | null;
+    audioElement?: HTMLAudioElement | null;
+  }
+
+  export function cleanupSession(resources: RealtimeSessionResources): void;
+
+  export class RealtimeConnectionManager {
+    state: RealtimeConnectionState;
+    conversationState: RealtimeConversationState;
+    peerConnection: RTCPeerConnection | null;
+    dataChannel: RTCDataChannel | null;
+    localStream: MediaStream | null;
+    audioElement: HTMLAudioElement | null;
+
+    constructor(options?: RealtimeConnectionOptions);
+    connect(params?: { ephemeralKey?: string; model?: string }): Promise<void>;
+    disconnect(): void;
+    cleanup(): void;
+    sendEvent(event: unknown): boolean;
+    setState(state: RealtimeConnectionState): void;
+    setConversationState(state: RealtimeConversationState): void;
+    canStartVoiceChat(): boolean;
+  }
+
+  export { RealtimeConnectionManager as RealtimeConnection };
+}

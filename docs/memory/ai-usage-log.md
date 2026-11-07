@@ -307,3 +307,56 @@ This document records the use of AI-assisted tools and models throughout the lif
 - **Verification**:
   - Live probe against `POST http://localhost:3000/api/realtime/session` returned `HTTP 200` with `{ ok: true, model: "gpt-realtime", expiresAt: 1794091377, ephemeralKey: "ek_..." }`.
   - `npm run verify` (`tsc --noEmit`, `next lint`, `vitest run`) passed with exit code 0 (7 test suites / 149 tests passing).
+
+## Session: 2026-11-07 (Test-Writer — Slice 3A WebRTC Connection & Audio Transport Test Suite)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Authored comprehensive unit tests for Slice 3A (WebRTC Connection & Audio Transport) based strictly on `ADR-06` and `ADR-10` in `docs/memory/decisions.md` and acceptance criteria (`AC-06.*`, `AC-10.*`) in `docs/memory/requirements.md`.
+- **Delivered Test Files**:
+  1. `tests/unit/realtime/connection.test.ts`: 19 unit tests covering:
+     - **State Machine Transitions & Button Enablement (`AC-06.1`, `AC-06.3`, `ADR-06`)**:
+       - Verified `canStartVoiceChat()` is `false` in `idle` and `ingesting`, and `true` only when `ready`.
+       - Verified transition to `connecting`, `connected`, `reconnecting`, and `error`.
+       - Verified conversation flow sub-states (`listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`).
+     - **WebRTC Connection Establishment & Audio Transport (`ADR-06`, `AC-04.2`)**:
+       - Verified microphone capture with `{ audio: true }` via `navigator.mediaDevices.getUserMedia`.
+       - Verified local audio track attached to `RTCPeerConnection` (`pc.addTrack`).
+       - Verified `"oai-events"` data channel creation (`pc.createDataChannel("oai-events")`).
+       - Verified SDP offer generation, `setLocalDescription`, and SDP exchange with OpenAI Realtime API (`POST https://api.openai.com/v1/realtime?model=...`) with `Authorization: Bearer <ephemeralKey>` and `Content-Type: application/sdp`.
+       - Verified remote description applied with answer SDP.
+       - Verified remote server audio stream attached to `audioElement.srcObject` upon `pc.ontrack`.
+       - Verified automatic token fetching when `fetchToken` callback is provided.
+     - **Deterministic Resource Teardown (`AC-06.2`, `ADR-06`)**:
+       - Verified `disconnect()` / `cleanupSession()` synchronously calls `track.stop()` on all local tracks, clears `audioElement.srcObject = null`, pauses audio, and closes both `RTCDataChannel` and `RTCPeerConnection`.
+       - Verified idempotency against repeated calls to `disconnect()`.
+       - Verified complete teardown on source switch (uploading new PDF or YouTube URL while connected).
+       - Standalone verification for `cleanupSession` helper with null/undefined resilience.
+     - **Poor Network Handling & 10s ICE Reconnect Grace Period (`AC-10.1` – `AC-10.3`, `ADR-10`)**:
+       - Verified `disconnected` state triggers `reconnecting` and starts 10,000 ms grace timer (using fake timers).
+       - Verified self-healing within 10 seconds cancels grace timer and returns seamlessly to `connected`.
+       - Verified grace timer expiry crossing 10,000 ms threshold triggers complete teardown and transitions to `error` while preserving context.
+       - Verified immediate catastrophic failure (`failed`) triggers immediate teardown and enters `error`.
+     - **Guarded Data Channel Sends (`AC-10.4`, `ADR-10.4`)**:
+       - Verified `sendEvent()` sends and returns `true` when `readyState === "open"`.
+       - Verified safe `false` return without unhandled `DOMException` when `readyState` is `"connecting"`, `"closing"`, `"closed"`, or channel is null.
+     - **All Connection Failure Modes**:
+       - Handles `getUserMedia` permission rejection (`NotAllowedError`).
+       - Handles `fetchToken` failure.
+       - Handles `createOffer` failure.
+       - Handles upstream OpenAI SDP exchange HTTP 4xx/5xx errors.
+       - Handles upstream OpenAI SDP exchange network timeouts / `AbortError`.
+       - Handles `setRemoteDescription` parse failure.
+     - **Alias Export**:
+       - Verified `RealtimeConnection` exported as alias for `RealtimeConnectionManager`.
+  2. `tests/fixtures/webrtc-fixtures.ts`: Complete high-fidelity mock WebRTC harness (`MockRTCPeerConnection`, `MockRTCDataChannel`, `MockMediaStream`, `MockMediaStreamTrack`, `MockHTMLAudioElement`, `setupMockWebRTCGlobals`).
+  3. `tests/unit/realtime/webrtc-fixtures.test.ts`: 6 unit tests verifying the mock WebRTC harness (100% passing).
+  4. `tests/types/shims.d.ts`: Ambient TypeScript definitions for `@/lib/realtime/connection`.
+- **Verification**:
+  - `npx tsc --noEmit` exited `0` (clean typecheck across all project tests and fixtures).
+  - `npx vitest run tests/unit/realtime/webrtc-fixtures.test.ts`: all 6 tests pass.
+  - `npx vitest run tests/unit/realtime/fixtures.test.ts tests/unit/realtime/session.test.ts`: all 45 tests pass.
+  - `tests/unit/realtime/connection.test.ts` fails cleanly on missing module `@/lib/realtime/connection`, ready for implementation by the implementer agent.
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.

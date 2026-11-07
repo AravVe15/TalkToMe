@@ -162,6 +162,18 @@ declare module "@/types/realtime" {
     sourceType?: "pdf" | "youtube" | string;
     voice?: string;
   }
+
+  export type TranscriptRole = "user" | "assistant";
+  export type TranscriptStatus = "transcribing" | "streaming" | "completed" | "interrupted";
+
+  export interface TranscriptItem {
+    id: string;
+    role: TranscriptRole;
+    text: string;
+    status: TranscriptStatus;
+    createdAt?: number;
+    updatedAt?: number;
+  }
 }
 
 declare module "@/lib/realtime/context" {
@@ -239,4 +251,33 @@ declare module "@/lib/realtime/connection" {
   }
 
   export { RealtimeConnectionManager as RealtimeConnection };
+}
+
+declare module "@/lib/realtime/transcript" {
+  import type { TranscriptItem, TranscriptRole, TranscriptStatus } from "@/types/realtime";
+  import type { RealtimeConversationState } from "@/lib/realtime/connection";
+
+  export type { TranscriptItem, TranscriptRole, TranscriptStatus };
+
+  export interface TranscriptManagerOptions {
+    onTranscriptChange?: (items: TranscriptItem[]) => void;
+    onConversationStateChange?: (state: RealtimeConversationState) => void;
+    initialItems?: TranscriptItem[];
+  }
+
+  export class TranscriptManager {
+    items: TranscriptItem[];
+    conversationState: RealtimeConversationState;
+
+    constructor(options?: TranscriptManagerOptions);
+
+    handleEvent(event: unknown | string): void;
+    getItems(): TranscriptItem[];
+    clear(): void;
+  }
+
+  export function reduceTranscriptEvent(
+    items: TranscriptItem[],
+    event: unknown
+  ): TranscriptItem[];
 }

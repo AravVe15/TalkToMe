@@ -28,6 +28,7 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-07 | Slice 2: Realtime Session Token Minting & Context Priming Implementation | Implementer | Gemini 4 Argon (High) | Implemented Slice 2 contracts (`src/types/realtime.ts`), direct context priming with the 48,000-character safe cap (`src/lib/realtime/context.ts`), and the server-side ephemeral token minting endpoint (`src/app/api/realtime/session/route.ts`) per ADR-04, ADR-05, and ADR-10. Verified typecheck, lint, and all 149 unit tests across 7 suites pass. | `read_file`, `write_file`, `edit_file`, `run_command` (`npm test`, `npm run verify`, `git status`) | Created `src/types/realtime.ts`, `src/lib/realtime/context.ts`, `src/app/api/realtime/session/route.ts`; updated `docs/memory/lessons-learned.md` and `docs/memory/ai-usage-log.md`. All 149 tests pass. |
 | 2026-11-07 | Slice 2: Realtime Session Token Minting & Context Priming Review | Reviewer | Gemini 4 Argon (High) | Audited Slice 2 (`src/types/realtime.ts`, `src/lib/realtime/context.ts`, `src/app/api/realtime/session/route.ts`) and tests (`tests/unit/realtime/session.test.ts`, `tests/fixtures/realtime-fixtures.ts`, `tests/unit/realtime/fixtures.test.ts`, `tests/types/shims.d.ts`) against ADR-04, ADR-05, ADR-10, AC-04/05/10.1, and `AGENTS.md`. Performed security audit, ADR compliance verification, anti-hack inspection, and ran `npm run verify`. | `read_file`, `edit_file`, `run_command` (`git status`, `git diff`, `npm run verify`) | **PASS.** `npm run verify` exited 0 (tsc 0 errors, ESLint 0 warnings/errors, 7 suites / 149 tests pass). Server-only `OPENAI_API_KEY` isolation, 48,000-char cap, Server VAD + `whisper-1`, 15s abort timeout, `Cache-Control: no-store`, and zero test-fixture special-casing confirmed. |
 | 2026-11-07 | Live OpenAI Ephemeral Token Diagnosis & GA `/v1/realtime/client_secrets` Fallback | Implementer | Gemini 4 Argon (High) | Diagnosed live `400 UPSTREAM_ERROR` on `POST /api/realtime/session`: OpenAI retired Beta `POST /v1/realtime/sessions` (`404 Invalid URL`) and `gpt-4o-realtime-preview` (`400 model_not_found`) in favor of GA `POST /v1/realtime/client_secrets` with model `gpt-realtime`. Implemented automatic GA fallback and dual response parser in `src/app/api/realtime/session/route.ts`. Verified live `200 OK` (`ek_...`) on `localhost:3000` and all 149 unit tests pass. | `read_file`, `edit_file`, `run_command` (`node` live probe, `npm run verify`, `git status`) | Updated `src/app/api/realtime/session/route.ts`, `docs/memory/lessons-learned.md` (§10), and `docs/memory/ai-usage-log.md`. Live `POST /api/realtime/session` returns 200 with real `ek_` token; 149/149 unit tests pass. |
+| 2026-11-07 | Slice 3A: WebRTC Connection & Audio Transport Implementation | Implementer | Gemini 4 Argon (High) | Implemented Slice 3A (`ADR-06`, `ADR-10` / `AC-06.*`, `AC-10.*`) in `src/lib/realtime/connection.ts` and `src/types/realtime.ts`: `RealtimeConnectionManager` (`RealtimeConnection`), `cleanupSession`, state machine (`idle` -> `ingesting` -> `ready` -> `connecting` -> `connected` -> `reconnecting` -> `error`), conversation sub-states (`listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`), WebRTC offer/answer SDP negotiation, remote `<audio>` binding, 10-second ICE disconnect recovery grace timer, and guarded `sendEvent` on `oai-events`. Verified all 25 tests in `connection.test.ts` and all 180 tests across 9 suites pass. | `read_file`, `write_file`, `edit_file`, `run_command` (`modern-web-guidance`, `npx vitest`, `npm run verify`, `git status`) | Created `src/lib/realtime/connection.ts`; updated `src/types/realtime.ts`, `docs/memory/lessons-learned.md` (§11), and `docs/memory/ai-usage-log.md`. All 9 test suites (180 tests) pass. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -356,6 +357,68 @@ This document records the use of AI-assisted tools and models throughout the lif
   - `npx vitest run tests/unit/realtime/webrtc-fixtures.test.ts`: all 6 tests pass.
   - `npx vitest run tests/unit/realtime/fixtures.test.ts tests/unit/realtime/session.test.ts`: all 45 tests pass.
   - `tests/unit/realtime/connection.test.ts` fails cleanly on missing module `@/lib/realtime/connection`, ready for implementation by the implementer agent.
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-07 (Implementer — Slice 3A WebRTC Connection & Audio Transport Implementation)
+- **Agent**: `implementer`
+- **Model**: Gemini 4 Argon (High)
+- **Task**: Implemented Slice 3A (`ADR-06`, `ADR-10` / `AC-06.*`, `AC-10.*`) in `src/lib/realtime/connection.ts` and `src/types/realtime.ts` to satisfy the test suite in `tests/unit/realtime/connection.test.ts`:
+  1. `cleanupSession`: Deterministically stops all local `MediaStreamTrack`s, pauses and clears `audioElement.srcObject = null`, detaches handlers, and closes `RTCDataChannel` and `RTCPeerConnection` safely with null/undefined resilience (`AC-06.2`).
+  2. `RealtimeConnectionManager` (and alias `RealtimeConnection`):
+     - Implements primary session state machine (`idle`, `ingesting`, `ready`, `connecting`, `connected`, `reconnecting`, `error`), `canStartVoiceChat()` (`true` only in `"ready"`), and conversation sub-states (`listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`) with subscriber notifications (`AC-06.1`, `AC-06.3`).
+     - Implements `connect()` performing optional `fetchToken()`, microphone capture via `navigator.mediaDevices.getUserMedia({ audio: true })`, local audio track attachment (`pc.addTrack`), remote audio stream attachment on `pc.ontrack` (`audioElement.srcObject`), `"oai-events"` data channel creation, SDP offer creation (`pc.createOffer`, `pc.setLocalDescription`), SDP exchange with OpenAI Realtime (`POST https://api.openai.com/v1/realtime?model=...` with GA `/v1/realtime/calls` fallback on 404), RFC 8866 `v=0` SDP validation, and `pc.setRemoteDescription`.
+     - Implements 10-second ICE disconnect recovery grace period (`AC-10.1`–`AC-10.3`): transitions to `"reconnecting"` on `"disconnected"`, cancels the timer and restores `"connected"` if `"connected"`/`"completed"` arrives within `10,000 ms`, or tears down resources and transitions to `"error"` if the timer expires or transport enters `"failed"`.
+     - Implements guarded `sendEvent()` (`AC-10.4`) checking `dataChannel.readyState === "open"` before calling `dataChannel.send(...)`.
+- **Verification**:
+  - `npx vitest run tests/unit/realtime/connection.test.ts`: 25/25 tests passing.
+  - `npm run verify` (`tsc --noEmit`, `next lint`, `vitest run`): exit code 0 (0 TypeScript errors, 0 ESLint warnings/errors, 9/9 test suites / 180/180 tests passing).
+
+## Session: 2026-11-07 (Test-Writer — Slice 3B Transcript Sync & Turn Ordering Test Suite)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Authored comprehensive unit tests for Slice 3B (Transcript Sync & Turn Ordering) based strictly on `ADR-08` in `docs/memory/decisions.md` and acceptance criteria (`AC-08.*`, `AC-06.3`) in `docs/memory/requirements.md`.
+- **Delivered Test Files**:
+  1. `tests/unit/realtime/transcript.test.ts`: 20 unit tests covering:
+     - **Fundamental Turn Lifecycle & Real-Time Streaming (`AC-08.1`, `AC-08.2`)**:
+       - Verified user placeholder creation on `conversation.item.created` with `role: "user"`, `status: "transcribing"`.
+       - Verified incremental delta streaming via `conversation.item.input_audio_transcription.delta`.
+       - Verified turn finalization on `conversation.item.input_audio_transcription.completed` (`status: "completed"`).
+       - Verified graceful handling of `conversation.item.input_audio_transcription.failed`.
+       - Verified assistant turn creation on `response.output_item.added` (`role: "assistant"`, `status: "streaming"`).
+       - Verified streaming assistant deltas across both Beta and GA variants (`response.audio_transcript.delta`, `response.output_audio_transcript.delta`, `response.text.delta`) and finalization on `response.done`.
+     - **Critical Race Condition & Turn Ordering Guarantee (`AC-08.1`, `ADR-08`)**:
+       - Specifically tested the asynchronous temporal race condition: when Whisper speech transcription completes *after* the assistant has already created its output turn and begun streaming deltas, the user turn remains pinned at index 0 (chronologically before the assistant's reply bubble at index 1).
+       - Multi-turn conversation ordering verification: guaranteed strict alternating chronological sequence `[User 1, Assistant 1, User 2, Assistant 2]` even when Whisper transcription resolves late across multiple turns.
+       - Interleaved delta ordering: verified user and assistant deltas arriving in interleaved temporal order maintain correct turn attribution and sequence.
+     - **Conversation Flow State Machine Tracking (`AC-06.3`, `ADR-08`)**:
+       - Verified transitions through `listening` -> `user_speaking` (on `speech_started`) -> `assistant_thinking` (on `speech_stopped` / `response.created`) -> `assistant_speaking` (on `audio_transcript.delta`) -> `listening` (on `response.done`).
+     - **GA & Beta Protocol Event Variants (`AC-08.2`)**:
+       - Verified support for `response.output_audio_transcript.delta` and `response.text.delta`.
+       - Verified deduplication of concurrent dual-emitted deltas with identical content.
+       - Verified finalization on `response.output_audio_transcript.done` and `response.audio_transcript.done`.
+     - **Out-of-Order Events & Edge Cases**:
+       - User delta or completed event arriving before `conversation.item.created`.
+       - Assistant delta arriving before `response.output_item.added`.
+       - Empty or undefined delta payloads handled safely.
+       - Preservation of Unicode emojis, accents, line breaks, and whitespace.
+       - Non-JSON string or malformed message resilience without throwing unhandled exceptions.
+       - Unrelated Realtime events (`rate_limits.updated`, `session.updated`) ignored cleanly.
+       - Duplicate `conversation.item.created` event idempotency.
+     - **Transcript State Operations**:
+       - `clear()` resets items to empty array.
+       - `getItems()` returns defensive snapshot copies preventing outside mutation.
+       - Standalone pure reducer `reduceTranscriptEvent` verification.
+  2. `tests/fixtures/transcript-fixtures.ts`: Comprehensive mock event objects and event factory helpers for OpenAI Realtime data channel transcription events.
+  3. `tests/unit/realtime/transcript-fixtures.test.ts`: 3 unit tests verifying transcript fixture schema compliance (100% passing).
+  4. `tests/types/shims.d.ts`: Ambient TypeScript definitions for `@/lib/realtime/transcript` (`TranscriptManager`, `reduceTranscriptEvent`, `TranscriptItem`, `TranscriptRole`, `TranscriptStatus`).
+- **Verification**:
+  - `npx tsc --noEmit` exited `0` (clean typecheck across all project tests and fixtures).
+  - `npx vitest run tests/unit/realtime/transcript-fixtures.test.ts`: all 3 tests pass.
+  - All existing test suites (10 suites / 183 tests) pass cleanly.
+  - `tests/unit/realtime/transcript.test.ts` fails cleanly on missing module `@/lib/realtime/transcript`, ready for implementation by the implementer agent.
 - **Strict Boundary Adherence**:
   - Zero files read or modified in `src/`.
   - Zero reads or access to `.env` or any `.env*` files.

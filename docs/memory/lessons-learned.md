@@ -100,3 +100,10 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Dual-Compatible Production Solution**:
   - `POST /api/realtime/session` first dispatches the ADR-04 `/v1/realtime/sessions` request; if OpenAI responds with `404`/`400` (`Invalid URL` or `model_not_found`), it automatically falls back to the GA `POST https://api.openai.com/v1/realtime/client_secrets` endpoint with model `"gpt-realtime"` and the GA nested `{ session: { type: "realtime", model: "gpt-realtime", instructions, audio: { input: { transcription: { model: "whisper-1" }, turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500, create_response: true, interrupt_response: true } }, output: { voice } } } }` payload.
   - Response parsing supports both Beta `{ client_secret: { value, expires_at }, model }` and GA `{ value, expires_at, session: { model } }` shapes, returning a live `ek_...` ephemeral key with `HTTP 200`.
+
+---
+
+## 11. RFC 8866 SDP Answer Validation & Prototype vs. Instance Method Mocking
+
+- **RFC 8866 SDP Header Validation (`v=0`)**:
+  - Every valid WebRTC Session Description Protocol (SDP) payload (RFC 4566 / RFC 8866) begins with the protocol version line `v=0`. Validating that the upstream SDP answer text is non-empty and begins with `v=0` before passing it to `pc.setRemoteDescription({ type: "answer", sdp })` catches malformed upstream text responses early with a standard `DOMException(..., "InvalidSessionDescriptionError")`, even in test environments where mock `RTCPeerConnection` classes define `setRemoteDescription = vi.fn(...)` as an own instance property rather than a prototype method.

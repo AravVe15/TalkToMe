@@ -234,3 +234,29 @@ This document records the use of AI-assisted tools and models throughout the lif
 - **Verification**:
   - Verified against the live Next.js dev server (`POST http://localhost:3000/api/ingest/pdf` with `assignment.pdf`), confirming zero Webpack warnings/errors and HTTP 200 (`charCount: 5803`).
   - Ran `npm run typecheck` (0 errors), `npm run lint` (0 warnings or errors), and `npm test` (all 104 unit tests across 5 test suites pass).
+
+## Session: 2026-11-07 (Test-Writer — Slice 2 Realtime Session Token Minting & Context Priming Test Suite)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Authored comprehensive unit tests for Slice 2 (Realtime Session Ephemeral Token Minting Route) based strictly on `ADR-04` and `ADR-05` in `docs/memory/decisions.md` and acceptance criteria (`AC-04.*` and `AC-05.*`, plus `AC-10.1`) in `docs/memory/requirements.md`.
+- **Delivered Test Files**:
+  1. `tests/unit/realtime/session.test.ts`: 39 unit tests covering:
+     - **Happy Path & Ephemeral Token Minting (`AC-04.2`, `AC-04.3`)**: Verifies HTTP 200 with `ephemeralKey`, `expiresAt`, `model`, and header `Cache-Control: no-store` for both PDF and YouTube sources; validates upstream fetch call to `https://api.openai.com/v1/realtime/sessions` with server-side `Authorization: Bearer <key>`, `model: "gpt-4o-realtime-preview"` (or `OPENAI_REALTIME_MODEL` override), `modalities: ["audio", "text"]`, `voice: "alloy"` (or optional body override), `input_audio_transcription: { model: "whisper-1" }`, and `turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 500, create_response: true, interrupt_response: true }`.
+     - **Context Priming & Safe 48,000-Char Cap (`AC-05.1` – `AC-05.3`)**: Tests sources $\le 48,000$ characters keeping full text intact (`isContextTruncated: false`), boundary condition at exact 48,000 characters, off-by-one threshold at 48,001 characters where context injected into `session.instructions` is sliced to the first 48,000 characters with `isContextTruncated: true`, massive context handling (75,000 chars), strict grounding guardrails (answer strictly from source, speak naturally for voice, state clearly if not covered), and no-chunking / no-RAG boundary compliance.
+     - **Secret Isolation & Missing Key (`AC-04.1`)**: Verifies HTTP 500 with `code: "SERVER_MISCONFIGURED"` when `OPENAI_API_KEY` is undefined, empty string, or whitespace; confirms no upstream fetch is dispatched; verifies `OPENAI_API_KEY` is never leaked in response bodies or headers.
+     - **Upstream OpenAI Failure Modes**: Mocks and verifies graceful error handling for upstream HTTP 401 Unauthorized, HTTP 429 Rate Limit, HTTP 500 / 503 Server Error, HTTP 400 Bad Request, HTML 502 Bad Gateway pages, and upstream 200 responses with missing/null `client_secret`.
+     - **Network Timeouts & Resiliency (`AC-10.1`)**: Verifies handling of upstream fetch timeouts / `AbortError` (HTTP 504 / 500 retryable) and network drops (`TypeError: fetch failed`).
+     - **Malformed Client Requests & Empty Text**: Verifies HTTP 400 with `code: "INVALID_REQUEST"` for malformed JSON syntax, non-object JSON primitives, JSON arrays, empty request bodies, empty string text, whitespace-only text, missing text property, and non-string text types.
+     - **Context Builder Unit Isolation (`@/lib/realtime/context`)**: Tests `MAX_REALTIME_CONTEXT_CHARS === 48_000` and `buildSessionInstructions` directly.
+  2. `tests/fixtures/realtime-fixtures.ts`: Provides standardized mock OpenAI session responses, custom model responses, mock error payloads (401, 429, 500, 400, HTML 502), exact-length text generator (`createExactLengthText`), and session request builder (`createSessionRequest`).
+  3. `tests/unit/realtime/fixtures.test.ts`: 8 unit tests verifying fixture generator determinism and mock schema validity.
+  4. `tests/types/shims.d.ts`: Ambient TypeScript definitions for `@/types/realtime`, `@/lib/realtime/context`, and `@/app/api/realtime/session/route`.
+- **Verification**:
+  - `npx tsc --noEmit` exited 0 (clean typecheck across all tests and fixtures).
+  - `npx vitest run tests/unit/realtime/fixtures.test.ts`: all 8 tests pass.
+  - `npx vitest run tests/unit/ingest`: all 103 existing Slice 1 tests pass.
+  - `tests/unit/realtime/session.test.ts` fails cleanly on missing module `@/app/api/realtime/session/route`, ready for implementation by the implementer agent.
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.

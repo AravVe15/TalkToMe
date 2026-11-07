@@ -131,3 +131,56 @@ declare module "@/app/api/ingest/youtube/route" {
 declare module "@/app/api/ingest/pdf/route" {
   export function POST(req: Request): Promise<Response>;
 }
+
+declare module "@/types/realtime" {
+  export interface RealtimeSessionSuccess {
+    ok: true;
+    ephemeralKey: string;
+    expiresAt: number;
+    model: string;
+    isContextTruncated?: boolean;
+  }
+
+  export type RealtimeSessionErrorCode =
+    | "SERVER_MISCONFIGURED"
+    | "INVALID_REQUEST"
+    | "UPSTREAM_ERROR"
+    | "UPSTREAM_TIMEOUT";
+
+  export interface RealtimeSessionError {
+    ok: false;
+    code: RealtimeSessionErrorCode | string;
+    message: string;
+    retryable?: boolean;
+  }
+
+  export type RealtimeSessionResult = RealtimeSessionSuccess | RealtimeSessionError;
+
+  export interface RealtimeSessionRequestBody {
+    text?: string;
+    title?: string;
+    sourceType?: "pdf" | "youtube" | string;
+    voice?: string;
+  }
+}
+
+declare module "@/lib/realtime/context" {
+  export const MAX_REALTIME_CONTEXT_CHARS: number;
+
+  export interface PreparedContext {
+    instructions: string;
+    isContextTruncated: boolean;
+    charCount: number;
+  }
+
+  export function buildSessionInstructions(params: {
+    text: string;
+    title?: string;
+    sourceType?: "pdf" | "youtube" | string;
+  }): PreparedContext | string;
+}
+
+declare module "@/app/api/realtime/session/route" {
+  export const runtime: string;
+  export function POST(req: Request): Promise<Response>;
+}

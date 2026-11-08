@@ -346,3 +346,40 @@ declare module "@/lib/realtime/controls" {
 
   export function setupRecvonlyTransceiver(pc: RTCPeerConnection): RTCRtpTransceiver;
 }
+
+declare module "@/app/page" {
+  import type React from "react";
+
+  export interface HomePageProps {
+    initialSource?: {
+      sourceType: "pdf" | "youtube";
+      title: string;
+      text: string;
+      charCount: number;
+      estimatedTokens: number;
+    } | null;
+    initialConnectionState?: string;
+    initialConversationState?: string;
+    initialTranscript?: Array<{
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      status: string;
+    }>;
+    initialMicStatus?: "available" | "unavailable";
+    initialMuted?: boolean;
+    initialError?: string | null;
+    initialTextFallback?: boolean;
+    previewExpanded?: boolean;
+  }
+
+  export default function Home(props?: HomePageProps): React.ReactElement;
+}
+
+declare module "@/components/AppUI" {
+  import type React from "react";
+  import type { HomePageProps } from "@/app/page";
+
+  export function AppUI(props?: HomePageProps): React.ReactElement;
+  export default function AppUI(props?: HomePageProps): React.ReactElement;
+}

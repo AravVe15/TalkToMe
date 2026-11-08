@@ -507,3 +507,34 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero files modified or created in `tests/`.
   - Zero access or reads to `.env` or `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-07 (Test-Writer — Slice 4: Mobile-First UI Comprehensive Component Tests)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Author comprehensive component test suite for Slice 4 (Mobile-First UI) in `tests/unit/ui/app-ui.test.ts` strictly derived from ADR-11, ADR-05, ADR-06, ADR-07, ADR-08, ADR-09, ADR-10, and corresponding acceptance criteria AC-11, AC-05, AC-06, AC-07, AC-08, AC-09, AC-10 in `docs/memory/requirements.md` and `docs/memory/decisions.md`.
+- **Deliverables**:
+  1. `tests/fixtures/ui-fixtures.ts`:
+     - Test source fixtures: `MOCK_PDF_SOURCE_SMALL`, `MOCK_PDF_SOURCE_EXACT_48K`, `MOCK_PDF_SOURCE_OVER_48K`, `MOCK_YOUTUBE_SOURCE`.
+     - Multi-turn transcript fixtures: `MOCK_UI_TRANSCRIPT_CONVERSATION`, `MOCK_UI_TRANSCRIPT_TRANSCRIBING`.
+     - Ingestion error fixtures: `MOCK_INGESTION_ERROR_FILE_TOO_LARGE`, `MOCK_INGESTION_ERROR_NO_OCR`, `MOCK_INGESTION_ERROR_YOUTUBE_BLOCKED`.
+     - Styling and layout validator helpers: `hasTouchTargetConstraints()` (min 44x44px target validation), `has16pxInputFontSize()` (min 16px text-base validation).
+     - Component interface: `HomePageProps`.
+  2. `tests/unit/ui/ui-fixtures.test.ts`: 5 unit tests validating source fixtures, token estimations (`Math.ceil(charCount / 4)`), transcript ordering, and touch target / font sizing validators (100% passing).
+  3. `tests/unit/ui/app-ui.test.ts`: 27 comprehensive component tests across 7 test suites:
+     - Suite 1: Mobile-First Responsive Layout & Viewport Optimization (ADR-11, AC-11.1–11.3): mobile viewport constraints (`max-w-md`, `mx-auto`, `min-h-dvh`, `overflow-x-hidden`), minimum 44x44px touch targets on interactive buttons, minimum 16px (`text-base`) input font sizing to prevent iOS Safari auto-zoom, and remote WebRTC `<audio autoPlay playsInline>` element configuration.
+     - Suite 2: Source Ingestion Controls & State Flow (AC-01, AC-02, AC-03, AC-06.1): PDF file upload and YouTube URL inputs, disabled 'Start Voice Chat' button in `idle` and `ingesting` states, extraction loading indicator, and enabled button in `ready` state.
+     - Suite 3: Collapsible Text Preview & 48,000-Char Truncation Warning (ADR-05, ADR-11, AC-05.1, AC-05.2, AC-11.1): title, character count, estimated token count, collapsible toggle button (`aria-expanded`), clean display without truncation warning for `<= 48,000` chars, and prominent non-blocking truncation warning banner for `> 48,000` chars preserving full preview text.
+     - Suite 4: Voice Session Controls Dock & Conversation Flow States (AC-06.2, AC-06.3, AC-07.1, AC-07.2): sticky bottom dock for one-thumb mobile access, connection status indicators (`connecting`, `connected`, `reconnecting`, `error`), conversation flow sub-state indicators (`listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`), manual 'Interrupt' button rendered during assistant speech, and 'Stop' / 'End Call' button.
+     - Suite 5: Synchronized Live Conversation Transcript Display (AC-08.1, AC-08.2): distinct styled user and assistant bubbles, transcribing status indicator for user speech, and strictly preserved chronological turn ordering in the DOM.
+     - Suite 6: Text Chat Fallback Mode & Mute Controls (AC-09.1–09.3): 'Microphone unavailable — using text chat mode' alert notice, text chat input dock and Send button, and microphone Mute/Unmute control button.
+     - Suite 7: Error States, Poor Network & Reconnection (AC-01.2, AC-10.1, AC-10.3): actionable error alert banners for scanned/empty PDF (No-OCR), file > 25MB, and blocked YouTube cloud datacenter IP; network reconnecting notice (`Network unstable — attempting to recover...`); Reconnect CTA button preserving existing transcript and document context.
+  4. `tests/types/shims.d.ts`: Ambient TypeScript definitions for `@/app/page` (`HomePageProps` and `Home` component) and `@/components/AppUI`.
+- **Verification**:
+  - `npx tsc --noEmit` exited `0` (clean compilation across all test files and fixtures).
+  - `npx vitest run tests/unit/ui/ui-fixtures.test.ts`: 5/5 tests passed.
+  - `npx vitest run --exclude tests/unit/ui/app-ui.test.ts`: all 14 test suites and 235 unit tests passing (100% pass rate).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: cleanly executes all 27 tests in RED phase against the un-implemented skeleton `src/app/page.tsx`, confirming robust assertion contracts for the implementer agent.
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.

@@ -34,6 +34,7 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-07 | Slice 4: Mobile-First UI Comprehensive Component Tests | Test-Writer | Gemini 3.8 Flash (High) | Authored comprehensive component test suite for Slice 4 (Mobile-First UI) in `tests/unit/ui/app-ui.test.ts` across 7 test suites (27 tests) derived from ADR-11 and AC-05 through AC-11. Created `tests/fixtures/ui-fixtures.ts` and `tests/unit/ui/ui-fixtures.test.ts`. Verified clean typecheck, fixture tests passing (5/5), and RED phase assertion coverage (27/27 failing cleanly). | `read_file`, `write_file`, `run_command` (`npx tsc`, `npx vitest`) | Created `tests/fixtures/ui-fixtures.ts`, `tests/unit/ui/ui-fixtures.test.ts`, `tests/unit/ui/app-ui.test.ts`; updated `tests/types/shims.d.ts` and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | Slice 3: WebRTC Connection, Audio, Transcript Sync, Interruption & Text Fallback Review | Reviewer | Gemini 3.8 Flash (High) | Audited complete Slice 3 implementation (`src/lib/realtime/{connection,transcript,controls}.ts`, `src/types/realtime.ts`) against ADR-06, ADR-07, ADR-08, ADR-09, ADR-10, and `AGENTS.md`. Performed connection lifecycle audit, transcript synchronization audit, speech interruption audit, text fallback audit, anti-hack check, and test verification. | `read_file`, `edit_file`, `run_command` (`npx tsc`, `npx next lint`, `npx vitest`) | **PASS.** Verified clean typecheck (0 errors), clean lint (0 warnings/errors), all 14 test suites and 235 unit tests for Slices 1-3 + UI fixtures pass (100% pass rate). Zero test-gaming markers or monkey-patches in `src/lib/realtime/`. Note that `npm run verify` exits with code 1 solely due to the subsequent Slice 4 UI tests committed in RED phase. |
 | 2026-11-08 | Slice 4: Mobile-First UI Implementation | Implementer | Gemini 3.8 Flash (High) | Implemented production mobile-first UI in `src/app/page.tsx` and modular components (`SourceIngestion`, `SourcePreview`, `SessionStatus`, `ConversationTranscript`, `SessionControls`) in `src/components/`, integrating Slices 1, 2, and 3. Satisfied all ADR-11 and AC-05 through AC-11 constraints (~390px layout, 44x44px touch targets, 16px input font sizes, audio autoplay/playsinline). Verified `npm run verify` (`tsc --noEmit`, `next lint`, and 262/262 unit tests pass). | `read_file`, `write_file`, `edit_file`, `run_command` (`modern-web-guidance`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run verify`) | Created components in `src/components/`, implemented `src/app/page.tsx`, updated `src/app/globals.css`, `lessons-learned.md`, `ai-usage-log.md`. All 15 test suites and 262 tests pass. |
+| 2026-11-08 | Mobile UI & iOS Safari Audit (`apple-web-app` skill) | Planner | Gemini 3.8 Flash (High) | Audited mobile UI and WebRTC audio against ADR-11 using the apple-web-app skill. Identified root causes of unpolished iPhone experience: missing viewport-fit=cover, missing safe-area padding (notch & home indicator overlap), loudspeaker acoustic feedback false barge-in loops from unconstrained getUserMedia({ audio: true }), and missing touch ergonomics. Updated ADR-11, AC-11, and lessons learned with safe-area variables, VoiceProcessingIO hardware echo cancellation, and viewport containment. Formulated implementation plan for implementer. | `read_file`, `edit_file`, `run_command` | Updated `docs/memory/decisions.md` (ADR-11), `docs/memory/requirements.md` (AC-11), `docs/memory/lessons-learned.md` (§3), and `docs/memory/ai-usage-log.md`. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -620,5 +621,22 @@ This document records the use of AI-assisted tools and models throughout the lif
 - **Strict Boundary Adherence**:
   - Zero files modified or created in `tests/`.
   - Zero access or reads to `.env` or `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Planner — Mobile UI & iOS Safari Audit via `apple-web-app` Skill)
+- **Agent**: `planner`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Audited the mobile UI implementation and WebRTC audio configuration using the `apple-web-app` skill guidelines. Investigated root causes for unpolished mobile experience on real iPhones:
+  1. Identified missing `viewport-fit=cover` in `src/app/layout.tsx` (causing WebKit to report `0px` safe-area insets).
+  2. Identified missing notch/Dynamic Island padding in `<header>` and missing bottom Home Indicator clearance in `SessionControls` sticky dock.
+  3. Identified the loudspeaker acoustic feedback trap: unconstrained `getUserMedia({ audio: true })` fails to activate WebKit VoiceProcessingIO hardware echo cancellation, causing phone speaker audio to leak into the microphone and trigger false Server VAD barge-in loops (`speech_started` / `response.cancel`).
+  4. Identified missing touch and viewport ergonomics: grey tap highlight flash, rubber-banding under sticky bars, lack of `touch-action: manipulation`, and missing `user-select: none` on controls.
+  5. Updated ADR-11 in `docs/memory/decisions.md` and AC-11 in `docs/memory/requirements.md` with comprehensive edge-to-edge specifications, acoustic constraints, and touch ergonomics.
+  6. Enhanced `docs/memory/lessons-learned.md` §3 with acoustic echo cancellation and safe-area gotchas.
+  7. Formulated a detailed implementation plan for the implementer agent.
+- **Rationale**: Elevate mobile WebRTC voice chat from a basic desktop port to a resilient, native-grade mobile web application on iOS Safari and Home Screen standalone mode.
+- **Strict Boundary Adherence**:
+  - Zero modifications to files in `src/` or `tests/`.
+  - Zero reads of `.env` or `.env*` files.
   - Zero git commits or pushes executed.
 

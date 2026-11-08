@@ -236,17 +236,46 @@ This document tracks durable technical and design decisions. Every significant d
 
 ---
 
-### ADR-11: Mobile-First UI/UX & iOS Safari Autoplay Compliance (`~390 px`)
-- **Status**: Accepted
-- **Context**: `assignment.pdf` requires a simple, mobile-first design optimized for `~390 px` width screens with clear session controls and collapsible text preview.
+### ADR-11: Mobile-First UI/UX, iOS Safe-Area Architecture & Acoustic Echo Cancellation (`~390 px`)
+- **Status**: Accepted (Amended with `apple-web-app` skill best practices & acoustic DSP constraints)
+- **Context**: `assignment.pdf` requires a simple, mobile-first design optimized for `~390 px` width screens with clear session controls and collapsible text preview. On real iPhones (Safari and standalone Web App), unpolished experiences stem from missing safe-area insets (`viewport-fit=cover`, notch/Dynamic Island collisions, home indicator bar overlap), grey tap flashes, rubber-banding under sticky bars, and—most critically—false barge-in feedback loops on phone loudspeakers when using unconstrained `{ audio: true }` without hardware Acoustic Echo Cancellation (AEC).
 - **Decision**:
-  1. **Viewport Optimization**: Single-column mobile-first layout (`max-w-md mx-auto min-h-dvh flex flex-col overflow-x-hidden`) optimized for `390 px` width screens.
-  2. **Collapsible Source Preview**: Render the extracted text in a collapsible panel displaying source title, character count, and estimated token count (plus the truncation warning banner if `charCount > 48,000` per **ADR-05**), collapsible so it does not push the live transcript and controls off-screen.
-  3. **Touch Targets & iOS Zoom Prevention**: Place primary controls (**Start/Stop Voice Chat**, **Mute/Unmute**, **Interrupt**, and **Text Chat Input**) in a sticky bottom dock with minimum `44x44 px` touch targets and `font-size: 16px` (`text-base`) on all form inputs to prevent iOS Safari auto-zoom.
-  4. **Mobile Audio Autoplay Unlock**: Attach and configure the remote `<audio autoPlay playsInline>` element synchronously within the user click gesture of **"Start Voice Chat"**.
-- **Rationale**: Designing specifically around `390 px` `dvh` layout, collapsible source preview, `44 px` touch targets, `16 px` inputs, and gesture-bound `<audio playsInline>` eliminates mobile Safari/Chrome layout and audio traps.
+  1. **Edge-to-Edge Safe-Area Architecture (`viewport-fit=cover`)**:
+     - Export Next.js `Viewport` configuration with `viewportFit: "cover"` (`width: "device-width"`, `initialScale: 1`). Without `viewport-fit=cover`, WebKit ignores notches and home indicators, reporting `env(safe-area-inset-*) = 0px`.
+     - Mirror `env()` values into `:root` CSS variables once: `--safe-area-inset-top`, `--safe-area-inset-bottom`, `--safe-area-inset-left`, `--safe-area-inset-right`.
+     - Header sizing must be `calc(3.5rem + var(--safe-area-inset-top))` with `padding-top: var(--safe-area-inset-top)`.
+     - Sticky bottom controls dock must pad bottom by `calc(var(--safe-area-inset-bottom) + 0.75rem)` so buttons and inputs clear the iOS Home Indicator swipe bar.
+     - **Safe-Area Inset Rule**: Top inset is legitimately `0px` on non-notched devices (iPhone SE), landscape orientations, and desktop. Layouts must always express bar dimensions as `base + inset`, never as inset alone, and never branch on `inset > 0`.
+  2. **Hardware Acoustic Echo Cancellation & Anti-Feedback Constraints**:
+     - Replace naive `getUserMedia({ audio: true })` in both `src/app/page.tsx` and `src/lib/realtime/connection.ts` with explicit hardware DSP constraints:
+       ```typescript
+       {
+         audio: {
+           echoCancellation: true,
+           noiseSuppression: true,
+           autoGainControl: true,
+         },
+       }
+       ```
+     - Set `track.contentHint = "speech"` on captured microphone tracks.
+     - **Loudspeaker False Barge-In Prevention**: Mandating `echoCancellation: true` activates iOS WebKit's hardware VoiceProcessingIO AudioUnit. This prevents the phone's bottom speaker output from leaking into the adjacent microphone and falsely triggering OpenAI Server VAD `speech_started` / `response.cancel` interruption loops.
+  3. **Touch Ergonomics & Safari Viewport Containment**:
+     - Enforce minimum `44x44 px` touch targets on all interactive buttons and `16px` (`text-base`) input font size to prevent iOS Safari auto-zoom on focus.
+     - Apply `-webkit-tap-highlight-color: transparent` globally to eliminate grey flash rectangles on touch.
+     - Apply `touch-action: manipulation` to all buttons, tabs, inputs, and controls to eliminate 300ms tap delay and suppress double-tap zoom while preserving pinch-to-zoom for accessibility.
+     - Apply `overscroll-behavior-y: contain` and `isolation: isolate` on the main scroll root to stop rubber-band bouncing behind fixed/sticky bars and stabilize `backdrop-filter` compositing.
+     - Apply `user-select: none` on interactive chrome (headers, buttons, footer dock) to prevent accidental text selection callouts during rapid tapping.
+     - Apply `body { text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }` to prevent font inflation on orientation change.
+  4. **Collapsible Source Preview & Gesture-Bound Audio Autoplay**:
+     - Display full extracted text in a collapsible preview container with token counts and the 48k-character warning banner (**ADR-05**), collapsing by default during calls so it does not crowd the viewport.
+     - Attach remote audio to `<audio autoPlay playsInline>` and invoke `.play()` synchronously within the user click gesture of "Start Voice Chat".
+  5. **Apple Web App Metadata & Status Bar Tinting**:
+     - Configure Apple web app metadata: `apple-mobile-web-app-capable: yes`, `apple-mobile-web-app-status-bar-style: black-translucent`, `apple-mobile-web-app-title: TalkToMe`, and `format-detection: { telephone: false }`.
+     - Maintain solid, opaque backgrounds on top header and body (`#f8fafc` / `#ffffff`) so Safari 26 edge-color sampling reliably tints status and address bars without transparent gradient bleed.
+- **Rationale**: Designing holistically around WebKit edge-to-edge safe areas, touch-action ergonomics, and hardware VoiceProcessingIO echo cancellation eliminates both visual layout defects (notch overlap, home bar interference, rubber-banding) and acoustic conversational failure modes (false barge-in loops on phone loudspeakers).
 - **Consequences**:
-  - Smooth, native-feeling mobile voice experience on iOS Safari and Android Chrome.
+  - Polished, native-app feel on iPhone Safari and Home Screen PWA.
+  - Conversational speech flows naturally over phone loudspeakers without self-interruption.
 
 ---
 

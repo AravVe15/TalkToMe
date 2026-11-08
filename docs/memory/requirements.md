@@ -48,9 +48,10 @@ Core flow:
 - If a microphone is unavailable (or permission is denied), seamlessly fall back to a text-based chat mode over the WebRTC `oai-events` data channel.
 
 ### 2.4 User Interface
-- Mobile-first design optimized for `~390 px` width screens.
-- Clear microphone and session controls (Start, Stop, Mute/Unmute, Interrupt, Reconnect, Text Fallback Input).
+- Mobile-first design optimized for `~390 px` width screens with edge-to-edge safe area support (`viewport-fit=cover`, notch/Dynamic Island padding, and Home Indicator bar clearance).
+- Clear microphone and session controls (Start, Stop, Mute/Unmute, Interrupt, Reconnect, Text Fallback Input) with $\ge 44\times 44\text{ px}$ touch targets, `16px` inputs, and `touch-action: manipulation`.
 - Visual connection status and conversation flow indicators (`listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`).
+- Hardware acoustic echo cancellation, noise suppression, and auto gain control to eliminate phone loudspeaker false barge-in loops.
 
 ### 2.5 Security
 - `OPENAI_API_KEY` must **never** be exposed in client code, browser bundles, or network responses.
@@ -136,10 +137,13 @@ The `test-writer` agent MUST author automated unit and integration tests verifyi
 - **`AC-10.3`**: If `connectionState` / `iceConnectionState` transitions to `"failed"` or the `10,000 ms` grace timer expires, the peer connection is cleaned up, the existing conversation transcript and extracted source context are preserved on screen, and a `"Reconnect Voice Session"` button is displayed.
 - **`AC-10.4`**: Attempting to send an event when `dataChannel.readyState !== "open"` is safely guarded against throwing an unhandled exception and surfaces a user-visible warning/error.
 
-### AC-11: Mobile-First UI/UX & Autoplay Compliance (`ADR-11`)
-- **`AC-11.1`**: Extracted text preview renders in a collapsible container showing source title, character count, and estimated token count (plus the truncation warning banner when `charCount > 48,000`), and toggles cleanly between collapsed and expanded states.
-- **`AC-11.2`**: Session controls (Start/Stop, Mute/Unmute, Interrupt, Text Send) have accessible labels, touch-friendly sizing ($\ge 44\times 44\text{ px}$), and `16px` (`text-base`) input font sizes to prevent iOS Safari zoom on a `~390 px` viewport.
-- **`AC-11.3`**: The remote WebRTC `<audio>` element configures `autoPlay` and `playsInline`.
+### AC-11: Mobile-First UI/UX, iOS Safe-Area Architecture & Acoustic Echo Cancellation (`ADR-11`)
+- **`AC-11.1`**: Extracted text preview renders in a collapsible container showing source title, character count, and estimated token count (plus the truncation warning banner when `charCount > 48,000`), and toggles cleanly between collapsed and expanded states without shifting page scroll position.
+- **`AC-11.2`**: Session controls (Start/Stop, Mute/Unmute, Interrupt, Text Send) have accessible labels, touch-friendly sizing ($\ge 44\times 44\text{ px}$), `touch-action: manipulation` to prevent 300ms tap delay / unwanted double-tap zoom, `-webkit-tap-highlight-color: transparent` to eliminate grey tap flashes, and `16px` (`text-base`) input font sizes to prevent iOS Safari auto-zoom on `~390 px` viewports.
+- **`AC-11.3`**: The remote WebRTC `<audio>` element configures `autoPlay` and `playsInline`, and audio playback is unlocked synchronously within the user gesture of clicking "Start Voice Chat".
+- **`AC-11.4`**: Viewport & Safe-Area Inset Handling (`apple-web-app`): The application exports `viewportFit: "cover"` in its Viewport metadata, mirrors `env(safe-area-inset-*)` into `:root` CSS custom properties, pads the top header with `calc(3.5rem + var(--safe-area-inset-top))` (accommodating `0px` top inset gracefully), and pads the sticky bottom controls dock with `calc(var(--safe-area-inset-bottom) + 0.75rem)` to guarantee clearance from the iPhone notch/Dynamic Island and bottom Home Indicator bar.
+- **`AC-11.5`**: Acoustic Echo Cancellation & Anti-Feedback Constraints: `getUserMedia` audio requests mandate `{ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }` and set `track.contentHint = "speech"` on captured microphone tracks, activating native mobile hardware DSP (VoiceProcessingIO) to prevent assistant loudspeaker audio from leaking into the microphone and creating false Server VAD barge-in loops.
+- **`AC-11.6`**: Scroll & Chrome Ergonomics: The root scroll container configures `overscroll-behavior-y: contain` and `isolation: isolate` to contain rubber-band bouncing behind sticky bars, interactive chrome applies `user-select: none`, and `text-size-adjust: 100%` is enforced on the body.
 
 ### AC-12: Bounded In-Memory Ingestion Cache (`ADR-12`)
 - **`AC-12.1`**: Repeated ingestion of the same YouTube `videoId` (or identical PDF SHA-256 buffer hash) within the in-memory cache TTL returns the cached `IngestionSuccess` result without redundant upstream parsing/scraping, and evicts oldest entries when capacity is exceeded.

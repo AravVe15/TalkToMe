@@ -17,9 +17,11 @@ This document captures operational gotchas, environment quirks, and technical in
 
 ---
 
-## 3. Realtime Audio & Browser Autoplay Nuances (To Monitor)
+## 3. Realtime Audio, Loudspeaker Acoustic Feedback & iOS Safari Autoplay
 
-- Modern mobile browsers (iOS Safari, Android Chrome) enforce strict autoplay policies on WebRTC remote audio streams. Remote audio elements must be attached and played in direct response to user gesture ("Start Voice Chat").
+- **Synchronous User Gesture Unlock**: Modern mobile browsers (iOS Safari, Android Chrome) enforce strict autoplay policies on WebRTC remote audio streams. Remote `<audio>` elements must have `autoPlay` and `playsInline`, and `audioElement.play()` must be invoked synchronously within the direct user gesture ("Start Voice Chat").
+- **Loudspeaker False Barge-In Loop (The Echo Cancellation Trap)**: Requesting microphone access with unconstrained `{ audio: true }` fails to activate native mobile hardware DSP on iOS WebKit. When the assistant's voice plays through the phone's built-in loudspeaker (situated next to the microphone at the bottom edge), acoustic leakage is picked up by the microphone and streamed to OpenAI. OpenAI's Server VAD interprets this as user speech, emitting `input_audio_buffer.speech_started` and canceling the assistant's own response mid-sentence (`response.cancel`), creating an endless self-interrupting feedback loop. Explicitly requesting `{ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }` and assigning `track.contentHint = "speech"` engages the hardware VoiceProcessingIO AudioUnit DSP to cancel speaker echo cleanly before WebRTC transmission.
+- **Edge-to-Edge Safe Area Insets (`viewport-fit=cover`)**: On iPhone Safari, `env(safe-area-inset-*)` values compute to `0px` unless `viewport-fit=cover` is declared in the HTML viewport meta tag. Express sticky top bar heights as `base + inset` (`calc(3.5rem + env(safe-area-inset-top))`) rather than inset alone, because top insets are legitimately `0px` on iPhone SE, landscape orientation, and desktop browsers. Sticky bottom control docks must pad `calc(env(safe-area-inset-bottom) + 0.75rem)` to avoid colliding with the iOS system Home Indicator swipe bar.
 
 
 ---

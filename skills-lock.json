@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "apple-web-app": {
+      "source": "joe-bell/skills",
+      "sourceType": "github",
+      "skillPath": "skills/apple-web-app/SKILL.md",
+      "computedHash": "b3af36dbaf06db849c05edb099e8a07843f51b8e400c2f6440e6313ba9355386"
+    }
+  }
+}

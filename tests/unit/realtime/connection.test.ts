@@ -143,8 +143,14 @@ describe("Slice 3A: WebRTC Connection & Audio Transport (AC-06, AC-10)", () => {
 
       await connectPromise;
 
-      // Verify microphone capture
-      expect(webrtcHarness.mockGetUserMedia).toHaveBeenCalledWith({ audio: true });
+      // Verify microphone capture with acoustic echo cancellation constraints (AC-11.5, ADR-11)
+      expect(webrtcHarness.mockGetUserMedia).toHaveBeenCalledWith({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
 
       // Verify peer connection created and audio track added
       const pc = manager.peerConnection as unknown as MockRTCPeerConnection;

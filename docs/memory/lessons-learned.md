@@ -151,3 +151,15 @@ This document captures operational gotchas, environment quirks, and technical in
   - A fallback mechanism is maintained to handle legacy environments gracefully if `https://api.openai.com/v1/realtime/calls` returns HTTP 404.
   - Unit test assertion in `tests/unit/realtime/connection.test.ts` (line 171) still asserts the legacy beta URL (`https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview`). Under `AGENTS.md` role separation rules, `implementer` is strictly denied from modifying `tests/`. This test assertion must be updated by `test-writer` (`agy --agent test-writer`) or the user to expect `https://api.openai.com/v1/realtime/calls`.
 
+---
+
+## 15. Hardware Acoustic Echo Cancellation (AEC) & Test Mock Constraints Migration
+
+- **AEC & Anti-Feedback Constraints (ADR-11 / AC-11.5)**:
+  - Replacing naive `getUserMedia({ audio: true })` with `{ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }` and setting `track.contentHint = "speech"` activates hardware VoiceProcessingIO DSP on mobile WebKit to prevent loudspeaker audio from feeding into the microphone and creating Server VAD barge-in loops.
+- **Slice 3A Test Fixture Assertion**:
+  - `tests/unit/realtime/connection.test.ts` line 147 was written during Slice 3A and strictly asserted `expect(webrtcHarness.mockGetUserMedia).toHaveBeenCalledWith({ audio: true })`.
+  - When production code implements AC-11.5, this assertion fails with an `AssertionError` because `toHaveBeenCalledWith` performs a deep equality check against `{ audio: true }`.
+  - In strict compliance with `AGENTS.md` and role separation boundaries (`implementer` is denied `edit_file(tests/*)` and `write_file(tests/*)`), this test assertion was NOT modified by `implementer` and must be updated by `test-writer` (`agy --agent test-writer`) or manually by the user to expect `toHaveBeenCalledWith({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })`.
+
+

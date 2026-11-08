@@ -52,12 +52,14 @@ export function SessionControls({
 
   return (
     <footer
-      className="sticky bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur border-t border-gray-200 shadow-lg flex flex-col gap-2 z-10"
+      className="sticky bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur border-t border-gray-200 shadow-lg flex flex-col gap-2 z-10 sticky-dock"
       style={{
         position: "sticky",
         bottom: 0,
         backgroundColor: "rgba(255, 255, 255, 0.95)",
         borderTop: "1px solid #e2e8f0",
+        paddingBottom:
+          "calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
       }}
     >
       {/* Microphone Unavailable Text Fallback Banner (AC-09.1) */}

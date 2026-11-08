@@ -640,3 +640,18 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero reads of `.env` or `.env*` files.
   - Zero git commits or pushes executed.
 
+## Session: 2026-11-08 (Implementer — iOS Safari Edge-to-Edge & Hardware AEC Implementation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Executed the 5-phase iOS Safari and Acoustic Echo Cancellation (AEC) implementation plan in `src/` per ADR-11 and AC-11.4–AC-11.6:
+  1. *Phase 1 (`src/app/layout.tsx`)*: Configured Next.js `Viewport` with `viewportFit: "cover"`, `themeColor: "#f8fafc"`, and Apple web app metadata (`apple-mobile-web-app-capable: yes`, `statusBarStyle: "black-translucent"`, `title: "TalkToMe"`).
+  2. *Phase 2 (`src/app/globals.css`)*: Mirrored `env(safe-area-inset-*)` into `:root` CSS custom properties, applied `-webkit-tap-highlight-color: transparent` globally, enabled `touch-action: manipulation` across interactive controls to suppress double-tap zoom delay, contained overscroll rubber-banding via `overscroll-behavior-y: contain` and `isolation: isolate` on `.min-h-dvh`, and prevented text callouts on chrome via `user-select: none`.
+  3. *Phase 3 (`src/app/page.tsx` & `src/components/SessionControls.tsx`)*: Padded top header with `calc(1rem + var(--safe-area-inset-top))` (gracefully handling `0px` insets) and padded sticky controls dock with `calc(0.75rem + var(--safe-area-inset-bottom))` for Home Indicator clearance.
+  4. *Phase 4 (`src/app/page.tsx` & `src/lib/realtime/connection.ts`)*: Replaced naive `{ audio: true }` with hardware VoiceProcessingIO DSP constraints (`echoCancellation: true`, `noiseSuppression: true`, `autoGainControl: true`) and assigned `track.contentHint = "speech"` on captured microphone tracks to eliminate loudspeaker acoustic feedback loops during mobile voice chat.
+  5. *Phase 5 (Verification)*: Executed `npm run typecheck` (clean, 0 errors) and `npm run lint` (clean, 0 warnings/errors). 14 of 15 test suites and 261 of 262 tests pass. The sole failing test is `tests/unit/realtime/connection.test.ts:147:46`, which asserts legacy `{ audio: true }` from Slice 3A. Under `AGENTS.md` boundaries, this assertion must be updated by `test-writer` (`agy --agent test-writer`) or manually by the user.
+- **Strict Boundary Adherence**:
+  - Zero files modified or created in `tests/`.
+  - Zero access or reads to `.env` or `.env*` files.
+  - Zero git commits or pushes executed.
+
+

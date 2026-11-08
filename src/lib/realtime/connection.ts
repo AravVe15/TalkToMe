@@ -193,9 +193,13 @@ export class RealtimeConnectionManager {
         throw new Error("Microphone mediaDevices API is unavailable.");
       }
 
-      // Capture microphone audio stream
+      // Capture microphone audio stream with hardware Acoustic Echo Cancellation (ADR-11 / AC-11.5)
       const stream = await globalThis.navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
       this.localStream = stream;
 
@@ -211,6 +215,11 @@ export class RealtimeConnectionManager {
             ? stream.getTracks()
             : [];
       for (const track of audioTracks) {
+        try {
+          track.contentHint = "speech";
+        } catch {
+          // Ignore if contentHint is not supported in environment
+        }
         pc.addTrack(track, stream);
       }
 

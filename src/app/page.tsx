@@ -238,8 +238,24 @@ export default function Home(props: any) {
       micUnavailable = true;
     } else {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Hardware Acoustic Echo Cancellation & Anti-Feedback Constraints (ADR-11 / AC-11.5)
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
         localStreamRef.current = stream;
+
+        // Set speech content hint to optimize WebKit VoiceProcessingIO hardware DSP
+        for (const track of stream.getAudioTracks()) {
+          try {
+            track.contentHint = "speech";
+          } catch {
+            // Ignore if not supported in environment
+          }
+        }
       } catch {
         micUnavailable = true;
       }
@@ -512,8 +528,15 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Top Application Header */}
-      <header className="p-4 bg-white border-b border-gray-200">
+      {/* Top Application Header (ADR-11, AC-11.4 / apple-web-app safe-area) */}
+      <header
+        className="p-4 bg-white border-b border-gray-200"
+        style={{
+          paddingTop:
+            "calc(1rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
+          backgroundColor: "#ffffff",
+        }}
+      >
         <h1 className="text-lg font-bold" style={{ fontSize: "18px", margin: 0 }}>
           Talk to a Document or YouTube Video
         </h1>

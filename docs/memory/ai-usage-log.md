@@ -438,3 +438,44 @@ This document records the use of AI-assisted tools and models throughout the lif
 - **Verification**:
   - `npx vitest run tests/unit/realtime/transcript.test.ts`: 25/25 tests passing.
   - `npm run verify` (`tsc --noEmit`, `next lint`, `vitest run`): exit code 0 (0 TypeScript errors, 0 ESLint warnings/errors, 11/11 test suites / 208/208 tests passing).
+
+## Session: 2026-11-07 (Test-Writer — Slice 3C Speech Interruption & Text Fallback Mode Test Suite)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Authored comprehensive unit tests for Slice 3C (Speech Interruption & Text Fallback Mode) based strictly on `ADR-07` and `ADR-09` in `docs/memory/decisions.md` and acceptance criteria (`AC-07.*`, `AC-09.*`, `AC-10.4`) in `docs/memory/requirements.md`.
+- **Delivered Test Files**:
+  1. `tests/unit/realtime/controls.test.ts`: 15 unit tests covering:
+     - **Automatic Speech Barge-In via Server VAD (`AC-07.1`, `ADR-07`)**:
+       - Verified that when `input_audio_buffer.speech_started` is received while assistant is speaking, conversation state transitions immediately to `user_speaking`, active remote audio playback is paused immediately (`audioElement.pause()`), in-progress assistant turn in transcript is finalized/marked interrupted while preserving spoken text, and `{ type: "response.cancel" }` and `{ type: "output_audio_buffer.clear" }` are dispatched over the data channel to stop upstream audio.
+       - Verified that receiving `speech_started` when assistant is not speaking does not trigger cancellations.
+     - **Manual Interrupt Button Control (`AC-07.2`, `ADR-07`)**:
+       - Verified that clicking manual Interrupt button while assistant is speaking dispatches `response.cancel` and `output_audio_buffer.clear` over `oai-events`, pauses remote audio element, finalizes assistant transcript turn as interrupted, and transitions conversation state back to `listening`.
+       - Verified safe no-op returning `false` when assistant is not speaking.
+       - Verified guarded data channel handling: safe `false` return without throwing unhandled `DOMException` when data channel is `connecting` or `closed` (`AC-10.4`).
+     - **Text-Based Chat Fallback Mode & Transceiver Configuration (`AC-09.1`, `ADR-09`)**:
+       - Verified that when microphone permission is denied (`NotAllowedError`) or device is unavailable (`NotFoundError`, `NotReadableError`, `OverconstrainedError`), session does not abort and transitions automatically to Text Fallback Mode (`isTextFallback: true`, `micStatus: "unavailable"`).
+       - Verified configuration of a `recvonly` audio transceiver (`pc.addTransceiver("audio", { direction: "recvonly" })`) on `RTCPeerConnection` so downstream model voice output continues to play while mic is absent.
+     - **Text Message Turn Dispatch (`AC-09.2`, `ADR-09`)**:
+       - Verified that submitting a non-empty text message dispatches `conversation.item.create` with `input_text` content followed immediately by `response.create` over `oai-events`, and appends completed user message to the transcript.
+       - Verified rejection of empty string and whitespace-only text messages safely without dispatching events.
+       - Verified trimming of leading/trailing whitespace.
+       - Verified guarded data channel send returning `false` without throwing when data channel is not open.
+     - **Microphone Mute / Unmute Controls (`AC-09.3`, `ADR-09`)**:
+       - Verified that `toggleMute()` / `setMuted()` sets `localAudioTrack.enabled` to `false` (mute) and `true` (unmute) without dropping or closing `RTCPeerConnection`.
+       - Verified text input remains functional while microphone is muted.
+       - Verified safe handling when toggling mute without a local audio track (e.g. in Text Fallback Mode).
+     - **Standalone Helpers & Alias Exports**:
+       - Verified standalone functional helpers: `interruptAssistant`, `sendTextMessage`, `toggleMute`, `setupRecvonlyTransceiver`.
+       - Verified `RealtimeControls` exported as an alias for `RealtimeControlsManager`.
+  2. `tests/fixtures/controls-fixtures.ts`: Mock cancel/clear events (`MOCK_RESPONSE_CANCEL_EVENT`, `MOCK_OUTPUT_AUDIO_BUFFER_CLEAR_EVENT`, `MOCK_RESPONSE_CREATE_EVENT`), text input event factory (`createTextInputMessageEvent`), and DOMException mock helper (`createMockMicError`).
+  3. `tests/unit/realtime/controls-fixtures.test.ts`: 3 unit tests verifying control fixture schema compliance (100% passing).
+  4. `tests/types/shims.d.ts`: Ambient TypeScript definitions for `@/lib/realtime/controls`.
+- **Verification**:
+  - `npx tsc --noEmit` exited `0` (clean typecheck across all project tests and fixtures).
+  - `npx vitest run tests/unit/realtime/controls-fixtures.test.ts`: all 3 tests pass.
+  - All existing test suites (12 suites / 211 tests) pass cleanly.
+  - `tests/unit/realtime/controls.test.ts` fails cleanly on missing module `@/lib/realtime/controls`, ready for implementation by the implementer agent.
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.

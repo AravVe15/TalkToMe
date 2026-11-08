@@ -281,3 +281,68 @@ declare module "@/lib/realtime/transcript" {
     event: unknown
   ): TranscriptItem[];
 }
+
+declare module "@/lib/realtime/controls" {
+  import type { RealtimeConversationState } from "@/lib/realtime/connection";
+  import type { TranscriptManager } from "@/lib/realtime/transcript";
+
+  export type MicStatus = "available" | "unavailable";
+
+  export interface RealtimeControlsOptions {
+    peerConnection?: RTCPeerConnection | null;
+    dataChannel?: RTCDataChannel | null;
+    localAudioTrack?: MediaStreamTrack | null;
+    audioElement?: HTMLAudioElement | null;
+    transcriptManager?: TranscriptManager | null;
+    onMicStatusChange?: (status: MicStatus) => void;
+    onMuteChange?: (isMuted: boolean) => void;
+    onTextFallbackChange?: (isFallback: boolean) => void;
+    onConversationStateChange?: (state: RealtimeConversationState) => void;
+    sendEvent?: (event: unknown) => boolean;
+  }
+
+  export class RealtimeControlsManager {
+    isMuted: boolean;
+    micStatus: MicStatus;
+    isTextFallback: boolean;
+    peerConnection: RTCPeerConnection | null;
+    dataChannel: RTCDataChannel | null;
+    localAudioTrack: MediaStreamTrack | null;
+    audioElement: HTMLAudioElement | null;
+    transcriptManager: TranscriptManager | null;
+
+    constructor(options?: RealtimeControlsOptions);
+
+    interrupt(): boolean;
+    handleBargeIn(event?: unknown): boolean;
+    sendTextMessage(text: string): boolean;
+    toggleMute(): boolean;
+    setMuted(muted: boolean): boolean;
+    enableTextFallback(reason?: string): void;
+    configureRecvonlyTransceiver(pc: RTCPeerConnection): RTCRtpTransceiver;
+  }
+
+  export { RealtimeControlsManager as RealtimeControls };
+
+  export function interruptAssistant(options: {
+    dataChannel?: RTCDataChannel | null;
+    audioElement?: HTMLAudioElement | null;
+    transcriptManager?: TranscriptManager | null;
+    onConversationStateChange?: (state: RealtimeConversationState) => void;
+    sendEvent?: (event: unknown) => boolean;
+  }): boolean;
+
+  export function sendTextMessage(options: {
+    text: string;
+    dataChannel?: RTCDataChannel | null;
+    transcriptManager?: TranscriptManager | null;
+    sendEvent?: (event: unknown) => boolean;
+  }): boolean;
+
+  export function toggleMute(
+    track?: MediaStreamTrack | null,
+    currentMuted?: boolean
+  ): boolean;
+
+  export function setupRecvonlyTransceiver(pc: RTCPeerConnection): RTCRtpTransceiver;
+}

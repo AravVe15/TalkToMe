@@ -168,7 +168,7 @@ describe("Slice 3A: WebRTC Connection & Audio Transport (AC-06, AC-10)", () => {
       // Verify SDP exchange with OpenAI Realtime API
       expect(fetchSpy).toHaveBeenCalledTimes(1);
       const [sdpUrl, sdpInit] = fetchSpy.mock.calls[0];
-      expect(sdpUrl).toBe("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview");
+      expect(sdpUrl).toBe("https://api.openai.com/v1/realtime/calls");
       expect(sdpInit?.method).toBe("POST");
       expect(sdpInit?.body).toBe(MOCK_LOCAL_SDP_OFFER);
 

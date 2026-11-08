@@ -263,9 +263,9 @@ export class RealtimeConnectionManager {
       await pc.setLocalDescription(offer);
 
       const sdpOffer = offer.sdp ?? "";
-      const sdpUrl = `${OPENAI_REALTIME_BASE_URL}?model=${encodeURIComponent(resolvedModel)}`;
+      const sdpUrl = OPENAI_REALTIME_CALLS_URL;
 
-      // Exchange SDP with OpenAI Realtime endpoint
+      // Exchange SDP with OpenAI Realtime endpoint (official GA Realtime Calls endpoint)
       let sdpResponse = await fetch(sdpUrl, {
         method: "POST",
         headers: {
@@ -275,8 +275,9 @@ export class RealtimeConnectionManager {
         body: sdpOffer,
       });
 
-      if (sdpResponse.status === 404) {
-        sdpResponse = await fetch(OPENAI_REALTIME_CALLS_URL, {
+      if (!sdpResponse.ok && sdpResponse.status === 404) {
+        const legacyUrl = `${OPENAI_REALTIME_BASE_URL}?model=${encodeURIComponent(resolvedModel)}`;
+        sdpResponse = await fetch(legacyUrl, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${ephemeralKey}`,

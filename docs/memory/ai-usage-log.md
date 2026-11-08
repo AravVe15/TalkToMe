@@ -33,6 +33,7 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-07 | Slice 3C: Speech Interruption & Text Fallback Mode Implementation | Implementer | Gemini 3.8 Flash (High) | Implemented Slice 3C (`ADR-07`, `ADR-09`, `ADR-10` / `AC-07.*`, `AC-09.*`, `AC-10.4`) in `src/lib/realtime/controls.ts`, `src/lib/realtime/transcript.ts`, and `src/types/realtime.ts`: `RealtimeControlsManager` (`RealtimeControls`), `handleBargeIn`, `interruptAssistant`, `sendTextMessage`, `setupRecvonlyTransceiver`, and `toggleMute`. Verified all 19 tests in `controls.test.ts` and all 230 tests across 13 suites pass. | `read_file`, `write_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npm test`) | Created `src/lib/realtime/controls.ts`; updated `src/lib/realtime/transcript.ts`, `src/types/realtime.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. All 13 test suites (230 tests) pass. |
 | 2026-11-07 | Slice 4: Mobile-First UI Comprehensive Component Tests | Test-Writer | Gemini 3.8 Flash (High) | Authored comprehensive component test suite for Slice 4 (Mobile-First UI) in `tests/unit/ui/app-ui.test.ts` across 7 test suites (27 tests) derived from ADR-11 and AC-05 through AC-11. Created `tests/fixtures/ui-fixtures.ts` and `tests/unit/ui/ui-fixtures.test.ts`. Verified clean typecheck, fixture tests passing (5/5), and RED phase assertion coverage (27/27 failing cleanly). | `read_file`, `write_file`, `run_command` (`npx tsc`, `npx vitest`) | Created `tests/fixtures/ui-fixtures.ts`, `tests/unit/ui/ui-fixtures.test.ts`, `tests/unit/ui/app-ui.test.ts`; updated `tests/types/shims.d.ts` and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | Slice 3: WebRTC Connection, Audio, Transcript Sync, Interruption & Text Fallback Review | Reviewer | Gemini 3.8 Flash (High) | Audited complete Slice 3 implementation (`src/lib/realtime/{connection,transcript,controls}.ts`, `src/types/realtime.ts`) against ADR-06, ADR-07, ADR-08, ADR-09, ADR-10, and `AGENTS.md`. Performed connection lifecycle audit, transcript synchronization audit, speech interruption audit, text fallback audit, anti-hack check, and test verification. | `read_file`, `edit_file`, `run_command` (`npx tsc`, `npx next lint`, `npx vitest`) | **PASS.** Verified clean typecheck (0 errors), clean lint (0 warnings/errors), all 14 test suites and 235 unit tests for Slices 1-3 + UI fixtures pass (100% pass rate). Zero test-gaming markers or monkey-patches in `src/lib/realtime/`. Note that `npm run verify` exits with code 1 solely due to the subsequent Slice 4 UI tests committed in RED phase. |
+| 2026-11-08 | Slice 4: Mobile-First UI Implementation | Implementer | Gemini 3.8 Flash (High) | Implemented production mobile-first UI in `src/app/page.tsx` and modular components (`SourceIngestion`, `SourcePreview`, `SessionStatus`, `ConversationTranscript`, `SessionControls`) in `src/components/`, integrating Slices 1, 2, and 3. Satisfied all ADR-11 and AC-05 through AC-11 constraints (~390px layout, 44x44px touch targets, 16px input font sizes, audio autoplay/playsinline). Verified `npm run verify` (`tsc --noEmit`, `next lint`, and 262/262 unit tests pass). | `read_file`, `write_file`, `edit_file`, `run_command` (`modern-web-guidance`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run verify`) | Created components in `src/components/`, implemented `src/app/page.tsx`, updated `src/app/globals.css`, `lessons-learned.md`, `ai-usage-log.md`. All 15 test suites and 262 tests pass. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -574,3 +575,50 @@ This document records the use of AI-assisted tools and models throughout the lif
      - Vitest: All 14 test suites covering Slices 1, 2, 3, and UI fixtures (**235 tests passed out of 235**, 100% pass rate).
      - *Note on `npm run verify`*: Exited with code 1 solely due to the subsequent Slice 4 UI component test suite (`tests/unit/ui/app-ui.test.ts`, 27 tests) committed in RED phase by `test-writer` ahead of Slice 4 UI implementation.
 - **Verdict**: **PASS**. All Slice 3 specifications, acceptance criteria, and quality standards are satisfied.
+
+## Session: 2026-11-08 (Implementer — Slice 4: Mobile-First UI Implementation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Implement Slice 4 (Mobile-First UI) in `src/` to satisfy all unit/component tests in `tests/unit/ui/app-ui.test.ts` (27 tests across 7 suites) and acceptance criteria `AC-05` through `AC-11` based strictly on `docs/memory/requirements.md` and `docs/memory/decisions.md`.
+- **Deliverables**:
+  1. `src/components/SourceIngestion.tsx`: PDF file upload (`accept=".pdf,application/pdf"`), YouTube URL form (`Load Video`), extraction loading state (`Extracting source content...`), and Start Voice Chat button (disabled during `idle` and `ingesting`, enabled during `ready`).
+  2. `src/components/SourcePreview.tsx`: Collapsible source preview panel with source title, char count, estimated token count, disclosure toggle (`aria-expanded`), full extracted text display, and non-blocking 48,000-character context truncation warning banner (`ADR-05`).
+  3. `src/components/SessionStatus.tsx`: Visual connection status badges (`connecting`, `connected`, `reconnecting`, `error`, `ready`, `idle`), active conversation flow sub-state badges (`listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`), network unstable notice (`Network unstable — attempting to recover...`), and Reconnect Voice Session CTA.
+  4. `src/components/ConversationTranscript.tsx`: Synchronized live conversation transcript with styled user and assistant bubbles, transcribing status indicator (`Transcribing...`), and preserved chronological turn order in DOM.
+  5. `src/components/SessionControls.tsx`: Sticky bottom dock (`sticky bottom-0`) with microphone unavailable text fallback notice, text chat input and Send button, active call Stop button (`End Call`), Mute/Unmute control, and manual Interrupt button.
+  6. `src/app/page.tsx`: Production Page component integrating Slices 1, 2, and 3: PDF upload route integration, YouTube route integration, WebRTC session negotiation, ephemeral token minting, user gesture audio element unlock, Server VAD barge-in, text fallback with `recvonly` audio transceiver, 10-second ICE reconnect grace period, and deterministic resource teardown on unmount.
+  7. `src/app/globals.css`: Mobile-first styling rules, 44x44px touch targets, 16px input font sizes (`text-base`), and responsive utilities.
+- **Verification**:
+  - `npm run typecheck` (`tsc --noEmit`): exit 0 (0 errors).
+  - `npm run lint` (`next lint`): exit 0 (0 warnings, 0 errors).
+  - `npm test` (`vitest run`): all 15 test files and 262 unit tests passing (100% pass rate).
+  - `npm run verify`: exit 0.
+- **Strict Boundary Adherence**:
+  - Zero files modified or created in `tests/`.
+  - Zero access or reads to `.env` or `.env*` files.
+  - Zero external dependencies or configuration files modified.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Implementer — WebRTC GA Calls Endpoint & Deprecated Beta Remediation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Updated WebRTC SDP offer exchange in `src/lib/realtime/connection.ts` and `src/app/page.tsx` to target OpenAI's official GA Realtime Calls endpoint (`https://api.openai.com/v1/realtime/calls`) with ephemeral Bearer token authentication following OpenAI's deprecation of the beta endpoint (`/v1/realtime?model=...`, which returns HTTP 400 Bad Request).
+- **Deliverables**:
+  1. `src/lib/realtime/connection.ts`:
+     - Updated primary SDP offer negotiation URL to `OPENAI_REALTIME_CALLS_URL` (`https://api.openai.com/v1/realtime/calls`).
+     - Maintained safe 404 fallback for legacy test environments if needed.
+     - Authenticates via `Authorization: Bearer ${ephemeralKey}` with `Content-Type: application/sdp`.
+  2. `src/app/page.tsx`:
+     - Client WebRTC connection initiates SDP exchange with `https://api.openai.com/v1/realtime/calls` using `Authorization: Bearer ${ephemeralKey}`.
+  3. `docs/memory/lessons-learned.md`:
+     - Added §14 documenting OpenAI GA WebRTC SDP Calls endpoint deprecation and migration from beta query-parameter URL to `/v1/realtime/calls`.
+- **Test Suite Status & Role Separation Boundary**:
+  - `npm run typecheck` (`tsc --noEmit`): exit 0 (clean).
+  - `npm run lint` (`next lint`): exit 0 (0 warnings, 0 errors).
+  - `npm test` (`vitest run`): 14 of 15 test suites and 261 of 262 tests pass. The sole failing test is `tests/unit/realtime/connection.test.ts:171:22`, which explicitly asserts the legacy beta URL (`expect(sdpUrl).toBe("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview")`).
+  - In strict compliance with `AGENTS.md` and role separation boundaries (`implementer` is denied `edit_file(tests/*)` and `write_file(tests/*)`), this test assertion was NOT modified by `implementer` and is flagged for manual update or execution by `test-writer` (`agy --agent test-writer`).
+- **Strict Boundary Adherence**:
+  - Zero files modified or created in `tests/`.
+  - Zero access or reads to `.env` or `.env*` files.
+  - Zero git commits or pushes executed.
+

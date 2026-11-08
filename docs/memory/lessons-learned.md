@@ -119,3 +119,33 @@ This document captures operational gotchas, environment quirks, and technical in
   - Client actions dispatch imperative event names (`conversation.item.create`), whereas upstream OpenAI Realtime servers broadcast past-participle events (`conversation.item.created`). Handling both in `reduceTranscriptEvent` allows client-side optimistic UI updates without special-casing.
 - **Conditional Barge-In Cancellation**:
   - Server VAD emits `input_audio_buffer.speech_started` whenever user speech begins. Guarding cancellation in `handleBargeIn` so it only halts playback, clears server audio buffers, and marks turns as interrupted when the assistant is actively speaking (`isAssistantSpeaking()`) prevents spurious cancel packets during ordinary user speaking turns.
+
+---
+
+## 13. React 19 SSR, Next.js 15 PageProps & Mobile-First UI Constraints (Slice 4)
+
+- **React 19 SSR HTML Comment Insertion (`<!-- -->`) Between JSX Expressions**:
+  - When rendering adjacent JSX expressions and string literals in React 19 (e.g. `{source.charCount} chars (~{source.estimatedTokens} tokens)`), `renderToString` inserts `<!-- -->` comment boundaries between adjacent nodes (yielding `74<!-- --> chars`).
+  - Regexes asserting on whitespace (`/74\s*chars/i`) fail against the rendered comment.
+  - *Fix*: Interpolate directly within a single contiguous template literal (`{`${source.charCount} chars (~${source.estimatedTokens} tokens)`}`) so React outputs uninterrupted text without comment separators.
+- **Next.js 15 App Router `PageProps` Constraint vs. Component Test Fixture Props**:
+  - In Next.js App Router, `.next/types/app/page.ts` validates `app/page.tsx` default exports against `PageProps` (`params?: Promise<...>`, `searchParams?: Promise<...>`) using `checkFields<Diff<PageProps, FirstArg<TEntry['default']>, 'default'>>()`.
+  - Typing `export default function Home(props: HomePageProps = {})` causes TypeScript to reject the signature because `undefined` is not assignable to `PageProps`, and custom props fail strict `Diff` constraints.
+  - *Fix*: Declare `export default function Home(props: any)` and unpack safely inside: `const safeProps: HomePageProps = (props as HomePageProps) || {};`. This allows Next.js's typecheck to succeed while fully supporting `renderToString(React.createElement(App, { ... }))` test fixtures.
+- **Incremental TypeScript Cache (`tsconfig.tsbuildinfo`) Invalidation**:
+  - In repositories with `"incremental": true`, `tsconfig.tsbuildinfo` caches module exports and can report stale `TS2305` or `TS2339` errors for newly added exports or shadowed types. Removing stale `tsconfig.tsbuildinfo` forces a clean compilation pass and regenerates the build cache accurately.
+- **Mobile Safari Touch Targets & Auto-Zoom Prevention**:
+  - iOS Safari automatically zooms into inputs with `font-size < 16px`, causing disruptive viewport panning. Applying `text-base` and `style={{ fontSize: "16px" }}` to every `<input>` prevents auto-zoom.
+  - Applying `min-h-[44px] min-w-[44px] py-3 px-4` and `style={{ minHeight: "44px", minWidth: "44px" }}` across all buttons enforces the Apple Human Interface Guidelines 44×44px touch target standard.
+
+---
+
+## 14. OpenAI WebRTC SDP Exchange: GA Calls Endpoint (`/v1/realtime/calls`) vs. Deprecated Beta Endpoint (`/v1/realtime` HTTP 400)
+
+- **Beta WebRTC SDP Offer Endpoint Deprecation**:
+  - OpenAI's live WebRTC service deprecated the beta query-parameter endpoint `POST https://api.openai.com/v1/realtime?model=...`, returning HTTP 400 Bad Request during SDP offer/answer exchange.
+  - The official GA WebRTC endpoint is `POST https://api.openai.com/v1/realtime/calls`, authenticated via `Authorization: Bearer <ephemeralKey>` with `Content-Type: application/sdp` and body containing the raw SDP offer string (`offer.sdp`).
+  - Production implementations in `src/lib/realtime/connection.ts` and `src/app/page.tsx` directly target `https://api.openai.com/v1/realtime/calls` with the minted ephemeral token (`Authorization: Bearer ek_...`).
+  - A fallback mechanism is maintained to handle legacy environments gracefully if `https://api.openai.com/v1/realtime/calls` returns HTTP 404.
+  - Unit test assertion in `tests/unit/realtime/connection.test.ts` (line 171) still asserts the legacy beta URL (`https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview`). Under `AGENTS.md` role separation rules, `implementer` is strictly denied from modifying `tests/`. This test assertion must be updated by `test-writer` (`agy --agent test-writer`) or the user to expect `https://api.openai.com/v1/realtime/calls`.
+

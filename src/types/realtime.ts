@@ -1,6 +1,6 @@
 /**
- * Realtime Voice Session, Context Priming & WebRTC Connection Contracts
- * (ADR-04, ADR-05, ADR-06, ADR-10 / AC-04, AC-05, AC-06, AC-10).
+ * Realtime Voice Session, Context Priming, WebRTC Connection & Transcript Contracts
+ * (ADR-04, ADR-05, ADR-06, ADR-08, ADR-10 / AC-04, AC-05, AC-06, AC-08, AC-10).
  */
 
 export interface RealtimeSessionSuccess {
@@ -65,4 +65,21 @@ export interface RealtimeSessionResources {
   dataChannel?: RTCDataChannel | null;
   localStream?: MediaStream | null;
   audioElement?: HTMLAudioElement | null;
+}
+
+export type TranscriptRole = "user" | "assistant";
+
+export type TranscriptStatus =
+  | "transcribing"
+  | "streaming"
+  | "completed"
+  | "interrupted";
+
+export interface TranscriptItem {
+  id: string;
+  role: TranscriptRole;
+  text: string;
+  status: TranscriptStatus;
+  createdAt?: number;
+  updatedAt?: number;
 }

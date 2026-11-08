@@ -479,3 +479,31 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero files read or modified in `src/`.
   - Zero reads or access to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-07 (Implementer — Slice 3C: Speech Interruption & Text Fallback Mode)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Implemented production logic for Slice 3C (Speech Interruption & Text Fallback Mode) strictly in `src/` to satisfy ADR-07 and ADR-09 in `docs/memory/decisions.md` and acceptance criteria AC-07 and AC-09 in `docs/memory/requirements.md`:
+  1. Implemented `src/lib/realtime/controls.ts` providing:
+     - `RealtimeControlsManager` and alias `RealtimeControls`.
+     - Automatic speech barge-in via Server VAD (`handleBargeIn` on `input_audio_buffer.speech_started`): checks `isAssistantSpeaking()`, halts active remote audio playback, marks streaming assistant turn as interrupted while preserving already spoken text, transitions state to `user_speaking`, and dispatches `response.cancel` + `output_audio_buffer.clear` over the data channel.
+     - Manual interrupt button (`interrupt()` / `interruptAssistant()`): sends `response.cancel` and `output_audio_buffer.clear` over the data channel, pauses remote audio playback, finalizes assistant transcript turn, and transitions state to `listening`.
+     - Text fallback mode (`enableTextFallback()` and `setupRecvonlyTransceiver()` / `configureRecvonlyTransceiver()`): configures a `recvonly` audio transceiver (`direction: "recvonly"`) on `RTCPeerConnection` when microphone is unavailable.
+     - Text turn dispatch (`sendTextMessage()`): validates non-empty text, trims whitespace, sends `conversation.item.create` (type `input_text`) followed by `response.create`, appends user message to transcript, and guards data channel readiness (`AC-10.4`).
+     - Microphone mute control (`toggleMute()` / `setMuted()`): toggles `localAudioTrack.enabled = !isMuted` without closing or renegotiating the `RTCPeerConnection`.
+  2. Updated `src/lib/realtime/transcript.ts`:
+     - Added support for both client-side `conversation.item.create` and server-side `conversation.item.created` events in `reduceTranscriptEvent`.
+     - Added handling for `response.cancel` and `response.cancelled` to transition streaming assistant items to `status: "interrupted"` while preserving text and returning to `listening` state.
+     - Added `markAssistantInterrupted()` and `appendUserMessage()` methods to `TranscriptManager`.
+  3. Updated `src/types/realtime.ts`:
+     - Exported `MicStatus` and `RealtimeControlsOptions`.
+  4. Updated `docs/memory/lessons-learned.md`:
+     - Added Section 12 documenting ambient type merging between `shims.d.ts` and `src/`, imperative vs. past-participle Realtime event names, and conditional barge-in cancellation.
+- **Verification**:
+  - `npm run typecheck` (`tsc --noEmit`): exit 0.
+  - `npm run lint` (`next lint`): exit 0 (0 warnings, 0 errors).
+  - `npm test` (`vitest run`): 13 test files / 230 unit tests passing (100% pass rate).
+- **Strict Boundary Adherence**:
+  - Zero files modified or created in `tests/`.
+  - Zero access or reads to `.env` or `.env*` files.
+  - Zero git commits or pushes executed.

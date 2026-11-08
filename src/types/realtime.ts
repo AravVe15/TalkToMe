@@ -83,3 +83,18 @@ export interface TranscriptItem {
   createdAt?: number;
   updatedAt?: number;
 }
+
+export type MicStatus = "available" | "unavailable";
+
+export interface RealtimeControlsOptions {
+  peerConnection?: RTCPeerConnection | null;
+  dataChannel?: RTCDataChannel | null;
+  localAudioTrack?: MediaStreamTrack | null;
+  audioElement?: HTMLAudioElement | null;
+  transcriptManager?: unknown | null;
+  onMicStatusChange?: (status: MicStatus) => void;
+  onMuteChange?: (isMuted: boolean) => void;
+  onTextFallbackChange?: (isFallback: boolean) => void;
+  onConversationStateChange?: (state: RealtimeConversationState) => void;
+  sendEvent?: (event: unknown) => boolean;
+}

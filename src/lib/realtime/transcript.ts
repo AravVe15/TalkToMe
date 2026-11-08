@@ -110,17 +110,22 @@ export function reduceTranscriptEvent(
   const now = Date.now();
 
   switch (eventType) {
+    case "conversation.item.create":
     case "conversation.item.created":
     case "conversation.item.added": {
       const itemObj =
         typeof parsed.item === "object" && parsed.item !== null
           ? (parsed.item as Record<string, unknown>)
           : null;
-      if (!itemObj || typeof itemObj.id !== "string" || !itemObj.id) {
+      if (!itemObj) {
         return items;
       }
 
-      const itemId = itemObj.id;
+      const itemId =
+        typeof itemObj.id === "string" && itemObj.id.length > 0
+          ? itemObj.id
+          : `item_user_msg_${now}_${Math.random().toString(36).slice(2, 8)}`;
+
       const existingIndex = items.findIndex((i) => i.id === itemId);
       if (existingIndex !== -1) {
         return items;
@@ -422,6 +427,24 @@ export function reduceTranscriptEvent(
       return modified ? nextItems : items;
     }
 
+    case "response.cancel":
+    case "response.cancelled": {
+      let modified = false;
+      const nextItems = items.map((item) => {
+        if (item.role === "assistant" && item.status === "streaming") {
+          modified = true;
+          return {
+            ...item,
+            status: "interrupted" as const,
+            updatedAt: now,
+          };
+        }
+        return item;
+      });
+
+      return modified ? nextItems : items;
+    }
+
     default:
       return items;
   }
@@ -465,6 +488,42 @@ export class TranscriptManager {
     return this.items.map((item) => ({ ...item }));
   }
 
+  markAssistantInterrupted(): void {
+    let modified = false;
+    const now = Date.now();
+    this.items = this.items.map((item) => {
+      if (item.role === "assistant" && item.status === "streaming") {
+        modified = true;
+        return {
+          ...item,
+          status: "interrupted" as const,
+          updatedAt: now,
+        };
+      }
+      return item;
+    });
+
+    if (modified) {
+      this.options.onTranscriptChange?.(this.getItems());
+    }
+  }
+
+  appendUserMessage(text: string): TranscriptItem {
+    const trimmed = text.trim();
+    const now = Date.now();
+    const item: TranscriptItem = {
+      id: `item_user_msg_${now}_${Math.random().toString(36).slice(2, 8)}`,
+      role: "user",
+      text: trimmed,
+      status: "completed",
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.items = [...this.items, item];
+    this.options.onTranscriptChange?.(this.getItems());
+    return item;
+  }
+
   clear(): void {
     this.items = [];
     this.setConversationState("listening");
@@ -492,6 +551,7 @@ export class TranscriptManager {
 
       case "response.done":
       case "response.cancelled":
+      case "response.cancel":
         this.setConversationState("listening");
         break;
 

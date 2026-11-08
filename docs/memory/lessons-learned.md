@@ -107,3 +107,15 @@ This document captures operational gotchas, environment quirks, and technical in
 
 - **RFC 8866 SDP Header Validation (`v=0`)**:
   - Every valid WebRTC Session Description Protocol (SDP) payload (RFC 4566 / RFC 8866) begins with the protocol version line `v=0`. Validating that the upstream SDP answer text is non-empty and begins with `v=0` before passing it to `pc.setRemoteDescription({ type: "answer", sdp })` catches malformed upstream text responses early with a standard `DOMException(..., "InvalidSessionDescriptionError")`, even in test environments where mock `RTCPeerConnection` classes define `setRemoteDescription = vi.fn(...)` as an own instance property rather than a prototype method.
+
+---
+
+## 12. Realtime Controls, Ambient Type Merging & Client/Server Event Names
+
+- **Ambient Shim Property Omission (`TS2339`)**:
+  - `tests/types/shims.d.ts` declared `TranscriptManager` with a baseline interface (`handleEvent`, `getItems`, `clear`). When `src/lib/realtime/controls.ts` directly invoked extended helper methods on `TranscriptManager` (`markAssistantInterrupted()`, `appendUserMessage()`), `tsc --noEmit` failed because ambient shims shadowed the rich implementation in `src/`.
+  - *Fix*: Use safe duck-typed casting (`as unknown as { markAssistantInterrupted?: () => void }`) in `controls.ts` while implementing both direct methods and standard event handlers (`response.cancel`, `conversation.item.create`) in `TranscriptManager`.
+- **Client vs. Server Realtime Event Naming (`create` vs. `created`)**:
+  - Client actions dispatch imperative event names (`conversation.item.create`), whereas upstream OpenAI Realtime servers broadcast past-participle events (`conversation.item.created`). Handling both in `reduceTranscriptEvent` allows client-side optimistic UI updates without special-casing.
+- **Conditional Barge-In Cancellation**:
+  - Server VAD emits `input_audio_buffer.speech_started` whenever user speech begins. Guarding cancellation in `handleBargeIn` so it only halts playback, clears server audio buffers, and marks turns as interrupted when the assistant is actively speaking (`isAssistantSpeaking()`) prevents spurious cancel packets during ordinary user speaking turns.

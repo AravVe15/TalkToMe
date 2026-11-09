@@ -250,8 +250,7 @@ export async function POST(req: Request): Promise<Response> {
         errCode === "model_not_found" ||
         errMsg.includes("does not exist")
       ) {
-        const gaModel =
-          model === DEFAULT_REALTIME_MODEL ? "gpt-realtime" : model;
+        const gaModel = model;
         upstreamRes = await fetch(
           "https://api.openai.com/v1/realtime/client_secrets",
           {

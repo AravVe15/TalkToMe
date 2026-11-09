@@ -1,6 +1,6 @@
 # Project Requirements & Verifiable Acceptance Criteria
 
-This document captures the functional, non-functional, and deliverable requirements derived directly from [`assignment.pdf`](../../assignment.pdf) along with the verifiable acceptance criteria (`AC-01` through `AC-12`) corresponding to the approved Architecture Decision Records in [`docs/memory/decisions.md`](./decisions.md). It serves as the durable specification for `test-writer`, `implementer`, and `reviewer`.
+This document captures the functional, non-functional, and deliverable requirements derived directly from [`assignment.pdf`](../../assignment.pdf) along with the verifiable acceptance criteria (`AC-01` through `AC-13`) corresponding to the approved Architecture Decision Records in [`docs/memory/decisions.md`](./decisions.md). It serves as the durable specification for `test-writer`, `implementer`, and `reviewer`.
 
 ---
 
@@ -58,6 +58,15 @@ Core flow:
 - All Realtime connections must authenticate exclusively using short-lived ephemeral tokens minted by `POST /api/realtime/session`.
 - **Early Request Boundary & Denial-of-Service Defense**: PDF upload routes inspect the `Content-Length` header early to reject oversized requests (`> 25 MB`) before buffering multipart form-data streams into server memory.
 - **SSRF Protection**: Outbound server-side requests for YouTube caption tracks must validate that target hostnames strictly match `youtube.com` or end with `.youtube.com` before issuing network requests. Outbound requests route via `YOUTUBE_PROXY_URL` when configured.
+
+### 2.6 Production Containerization & Public Cloud Hosting (Deliverable #1)
+- **Container Runtime & Build Isolation**:
+  - Package the application via a multi-stage `node:20-bookworm-slim` `Dockerfile` (`builder` -> `runner`) that runs `npm ci`, `npm run build`, and `npm prune --omit=dev`, executes as non-root `USER node`, binds `0.0.0.0:${PORT:-3000}`, sets `NODE_OPTIONS="--max-old-space-size=384"`, and preserves `node_modules/pdfjs-dist` (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts/`, `cmaps/`) on disk.
+  - Exclude `.env`, `.env.*`, `.git`, `node_modules`, `.next`, and `tests` via `.dockerignore` so secrets and test fixtures never enter image layers.
+- **Operational Readiness & Health Probe (`GET /api/health`)**:
+  - Expose a zero-external-IO readiness endpoint (`GET /api/health` on Node.js runtime) with `Cache-Control: no-store` verifying local `pdfjs-dist` worker/font/CMap assets and reporting strictly boolean `openaiConfigured` and `youtubeProxyConfigured` flags without leaking secret values.
+- **Public HTTPS & 25 MB Upload Support**:
+  - Deploy on a container platform (Render or Railway) providing public `https://` TLS termination (mandatory for mobile browser `getUserMedia` Secure Context) and native `25 MB` `multipart/form-data` request body support.
 
 ---
 
@@ -150,6 +159,24 @@ The `test-writer` agent MUST author automated unit and integration tests verifyi
 
 ### AC-12: Bounded In-Memory Ingestion Cache (`ADR-12`)
 - **`AC-12.1`**: Repeated ingestion of the same YouTube `videoId` (or identical PDF SHA-256 buffer hash) within the in-memory cache TTL returns the cached `IngestionSuccess` result without redundant upstream parsing/scraping, and evicts oldest entries when capacity is exceeded.
+
+### AC-13: Production Containerization, Health Verification & Public Cloud Deployment (`ADR-13`)
+- **`AC-13.1`**: **Health & Readiness Endpoint (`GET /api/health` & `getDeploymentHealth`)**:
+  - `GET /api/health` (`export const runtime = "nodejs"`) and `getDeploymentHealth(options?)` in `@/lib/deploy/config` evaluate local runtime readiness without performing external network requests.
+  - When all 4 required `pdfjs-dist` runtime assets (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts`, `cmaps`) exist on disk under `pdfBaseDir` (defaulting to `path.join(process.cwd(), "node_modules", "pdfjs-dist")`) and `OPENAI_API_KEY` is non-empty, `GET /api/health` returns HTTP `200` with header `Cache-Control: no-store` and JSON `{ ok: true, status: "ok", timestamp, uptimeSeconds, environment, checks: { pdfEngine: "ok", openaiConfigured: true, youtubeProxyConfigured: boolean }, limits: { maxPdfSizeBytes: 26214400, maxRealtimeContextChars: 48000 } }`.
+  - When `pdfEngine === "ok"` but `OPENAI_API_KEY` is missing or whitespace-only, `GET /api/health` returns HTTP `200` with `ok: true`, `status: "degraded"`, and `checks.openaiConfigured: false`.
+  - When any required `pdfjs-dist` asset is missing from disk, `checkPdfEngineAssets(baseDir)` returns `{ ok: false, missingAssets: string[] }`, and `GET /api/health` returns HTTP `503` with `ok: false`, `status: "error"`, `checks.pdfEngine: "missing"`, and `missingAssets`.
+- **`AC-13.2`**: **Strict Secret Redaction in Health & Diagnostics**:
+  - Neither `getDeploymentHealth()` nor `GET /api/health` may ever include the raw string value, prefix, substring, or character length of `OPENAI_API_KEY` or `YOUTUBE_PROXY_URL` anywhere in the JSON response payload or HTTP headers—exposing strictly boolean `openaiConfigured` and `youtubeProxyConfigured` indicators.
+- **`AC-13.3`**: **Container Port & Hostname Binding (`resolveServerPort` & `resolveBindHostname`)**:
+  - `resolveServerPort(env?)` parses `env.PORT` as a strict integer in `[1, 65535]` (supporting dynamic ports injected by Render/Railway such as `10000` or `8080`) and falls back to `3000` (`DEFAULT_SERVER_PORT`) when `PORT` is unset, empty, non-numeric, `<= 0`, or `> 65535`.
+  - `resolveBindHostname(env?)` returns the trimmed `env.HOSTNAME` or defaults to `"0.0.0.0"` (`DEFAULT_BIND_HOSTNAME`) so container edge load balancers can route traffic into the container.
+- **`AC-13.4`**: **Multi-Stage Container Specification & Build Isolation (`validateDockerfileSpec` & `validateDockerignoreSpec`)**:
+  - `getCanonicalDockerfile()` returns a valid multi-stage `Dockerfile` (`FROM node:20-bookworm-slim AS builder` and `FROM node:20-bookworm-slim AS runner`) that passes `validateDockerfileSpec()`: runs `npm ci`, `npm run build`, and `npm prune --omit=dev`; sets `NODE_ENV=production` and `NODE_OPTIONS="--max-old-space-size=384"`; preserves `/app/node_modules` (including `pdfjs-dist`); runs as non-root `USER node`; binds `0.0.0.0` and `${PORT:-3000}` via `exec`; and contains zero hardcoded `OPENAI_API_KEY` or `COPY .env` directives.
+  - `getCanonicalDockerignore()` returns a `.dockerignore` specification that passes `validateDockerignoreSpec()`: explicitly excluding `.env`, `.env.*`, `.git`, `node_modules`, `.next`, and `tests`.
+  - `getCanonicalRenderManifest()` and `getCanonicalRailwayManifest()` define declarative container deployment configs pointing health checks to `/api/health`.
+- **`AC-13.5`**: **Public HTTPS & End-to-End Evaluator Readiness**:
+  - The deployed container on Render or Railway serves traffic over public `https://` (satisfying mobile Safari/Chrome `getUserMedia` Secure Context requirements), accepts PDF uploads up to `25 MB` (`26,214,400` bytes), handles YouTube transcript ingestion (via InnerTube / `YOUTUBE_PROXY_URL` or actionable `503 YOUTUBE_CLOUD_IP_BLOCKED`), and supports multi-turn WebRTC voice sessions with barge-in interruption and poor-network recovery.
 
 ---
 

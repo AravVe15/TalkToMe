@@ -383,3 +383,83 @@ declare module "@/components/AppUI" {
   export function AppUI(props?: HomePageProps): React.ReactElement;
   export default function AppUI(props?: HomePageProps): React.ReactElement;
 }
+
+declare module "@/types/deploy" {
+  export type HealthStatus = "ok" | "degraded" | "error";
+
+  export interface DeploymentChecks {
+    pdfEngine: "ok" | "missing";
+    openaiConfigured: boolean;
+    youtubeProxyConfigured: boolean;
+  }
+
+  export interface DeploymentLimits {
+    maxPdfSizeBytes: number;
+    maxRealtimeContextChars: number;
+  }
+
+  export interface DeploymentHealthPayload {
+    ok: boolean;
+    status: HealthStatus;
+    timestamp: string;
+    uptimeSeconds: number;
+    environment: string;
+    checks: DeploymentChecks;
+    limits: DeploymentLimits;
+    missingAssets?: string[];
+  }
+
+  export interface DeploymentConfig {
+    port: number;
+    hostname: string;
+    pdfBaseDir: string;
+    maxPdfSizeBytes: number;
+    maxRealtimeContextChars: number;
+  }
+
+  export interface ValidationResult {
+    valid: boolean;
+    errors: string[];
+  }
+}
+
+declare module "@/lib/deploy/config" {
+  import type {
+    DeploymentHealthPayload,
+    DeploymentConfig,
+    ValidationResult,
+  } from "@/types/deploy";
+
+  export const DEFAULT_SERVER_PORT: number;
+  export const DEFAULT_BIND_HOSTNAME: string;
+  export const REQUIRED_PDF_ENGINE_ASSETS: readonly string[];
+
+  export function resolveServerPort(env?: Record<string, string | undefined>): number;
+  export function resolveBindHostname(env?: Record<string, string | undefined>): string;
+
+  export function checkPdfEngineAssets(baseDir?: string): {
+    ok: boolean;
+    missingAssets: string[];
+  };
+
+  export function getDeploymentHealth(options?: {
+    env?: Record<string, string | undefined>;
+    pdfBaseDir?: string;
+    uptimeSeconds?: number;
+    timestamp?: string;
+  }): DeploymentHealthPayload;
+
+  export function getCanonicalDockerfile(): string;
+  export function validateDockerfileSpec(content: string): ValidationResult;
+
+  export function getCanonicalDockerignore(): string;
+  export function validateDockerignoreSpec(content: string): ValidationResult;
+
+  export function getCanonicalRenderManifest(): string;
+  export function getCanonicalRailwayManifest(): string;
+}
+
+declare module "@/app/api/health/route" {
+  export const runtime: "nodejs";
+  export function GET(req?: Request): Promise<Response>;
+}

@@ -298,3 +298,65 @@ This document tracks durable technical and design decisions. Every significant d
 - **Rationale**: Stateless API routes with a bounded in-memory cache satisfy all functional requirements while remaining 100% compatible with both serverless and container cloud hosts.
 - **Consequences**:
   - Zero database setup friction and faster repeat ingestion during live demos.
+
+---
+
+### ADR-13: Production Containerization, Runtime Hardening & Public Cloud Hosting (Render / Railway)
+- **Status**: Accepted
+- **Context**: Deliverable #1 of `assignment.pdf` requires a publicly hosted web application ready to demo and evaluate across the 5-step Review Script (YouTube caption ingestion, $\le 25\text{ MB}$ PDF upload and full text extraction, mobile WebRTC voice conversation with barge-in interruption, poor network resilience, and strict secret isolation). In **ADR-02 (`[CRITICAL-1] Option 1A`)**, we selected container hosting (Render / Railway) to avoid Vercel's `4.5 MB` serverless payload ceiling. Furthermore, our spatial PDF extractor (`src/lib/ingest/pdf.ts`, Lesson Learned §8) dynamically imports `pdfjs-dist` (`legacy/build/pdf.mjs` and `pdf.worker.mjs`) via `/* webpackIgnore: true */` and loads `standard_fonts/` and `cmaps/` from `path.join(process.cwd(), "node_modules", "pdfjs-dist")`, which standard bundler tree-shaking (`@vercel/nft` standalone trace) would omit if not explicitly preserved in the container runtime image.
+- **Decision**:
+  1. **Multi-Stage Debian Slim Container Architecture (`Dockerfile`)**:
+     - **Base Image**: Standardize on `node:20-bookworm-slim` across build and runtime stages to guarantee GNU `glibc` compatibility for Node.js and `pdfjs-dist` while keeping the compressed image footprint compact (`<250 MB`) and free of unnecessary build toolchains.
+     - **Stage 1 (`builder`)**:
+       - Set `WORKDIR /app`.
+       - Copy `package.json` and `package-lock.json` and run `npm ci` for deterministic lockfile installation.
+       - Copy source files (`src/`, `tsconfig.json`, `next.config.ts`, `postcss.config.*`, etc.) and execute `npm run build` (`next build`).
+       - Execute `npm prune --omit=dev` to strip all development dependencies (`typescript`, `vitest`, `eslint`, `tailwindcss`, `@types/*`), retaining strictly the 4 production dependencies (`next`, `react`, `react-dom`, `pdfjs-dist`).
+     - **Stage 2 (`runner`)**:
+       - Start from a clean `node:20-bookworm-slim` image with `WORKDIR /app`.
+       - Set `ENV NODE_ENV=production`, `ENV NEXT_TELEMETRY_DISABLED=1`, `ENV HOSTNAME=0.0.0.0`, `ENV PORT=3000`, and `ENV NODE_OPTIONS="--max-old-space-size=384"`.
+       - Copy `--chown=node:node` the pruned `/app/node_modules` (preserving `/app/node_modules/pdfjs-dist/legacy/build/pdf.mjs`, `pdf.worker.mjs`, `standard_fonts/`, and `cmaps/` on disk without modifying `next.config.ts`), `/app/.next`, `/app/package.json`, and `/app/next.config.ts`.
+       - Switch to the unprivileged `USER node` (UID `1000`) and launch via PID-preserving `exec` (`CMD ["sh", "-c", "exec ./node_modules/.bin/next start -H ${HOSTNAME:-0.0.0.0} -p ${PORT:-3000}"]`) so `SIGTERM`/`SIGINT` signals reach `next-server` cleanly during zero-downtime container rollouts.
+  2. **Build-Time & Runtime Secret Isolation (`.dockerignore` & Platform Env)**:
+     - Enforce a strict `.dockerignore` excluding `.env`, `.env.*`, `.git`, `node_modules`, `.next`, `tests`, `coverage`, and `docs/memory` so local secrets or test artifacts are never baked into Docker image layers.
+     - Inject `OPENAI_API_KEY` (mandatory) and `YOUTUBE_PROXY_URL` (optional) strictly at container runtime via the Render/Railway environment secret manager. Never bake secrets via `ARG` or `ENV` in the `Dockerfile`, and never use `NEXT_PUBLIC_*` prefixes.
+  3. **Network, Memory & Ingestion Boundaries in Cloud Containers**:
+     - **25 MB PDF Boundary & V8 Heap**: Render and Railway edge proxies natively allow `multipart/form-data` bodies $\ge 25\text{ MB}$ (`26,214,400` bytes). Setting `NODE_OPTIONS="--max-old-space-size=384"` ensures V8 proactively garbage-collects transient `25 MB` `ArrayBuffer`/`Uint8Array` clones during `pdfjs-dist` worker transfer well below standard `512 MB` container cgroup OOM limits, while `ingestionCache` (`ADR-12`) stores only extracted text strings (`~50–200 KB`), never raw binary PDF buffers.
+     - **Cloud IP YouTube Egress (`ADR-03`)**: Mitigate datacenter IP blocks via the three-tier strategy in `src/lib/ingest/youtube.ts`: (1) InnerTube Android player client (`com.google.android.youtube/20.10.38`) to bypass web `&exp=xpe` PoToken empty responses, (2) optional `YOUTUBE_PROXY_URL` routing with `*.youtube.com` SSRF validation, and (3) deterministic `503 YOUTUBE_CLOUD_IP_BLOCKED` error reporting when unproxied cloud IPs are challenged.
+  4. **Public HTTPS & Direct WebRTC Media Topology**:
+     - Terminate TLS (`https://`) at the Render (`*.onrender.com`) or Railway (`*.up.railway.app`) public edge load balancer, satisfying the mandatory browser **Secure Context** requirement for mobile Safari and Chrome `navigator.mediaDevices.getUserMedia()`.
+     - Keep all WebRTC UDP/SRTP audio streams and `oai-events` `RTCDataChannel` traffic direct between the user's mobile browser and OpenAI's Realtime edge (`POST https://api.openai.com/v1/realtime/calls`), using the container strictly for stateless HTTP control-plane routes (`/api/ingest/*`, `/api/realtime/session`, `/api/health`).
+  5. **Operational Readiness, Health Endpoint (`GET /api/health`) & Deployment Contracts (`src/lib/deploy/config.ts`)**:
+     - Implement `src/types/deploy.ts` and `src/lib/deploy/config.ts` exporting:
+       - `resolveServerPort(env?)`: Validates integer `PORT` in `[1, 65535]`, defaulting to `3000`.
+       - `resolveBindHostname(env?)`: Defaults to `"0.0.0.0"`.
+       - `checkPdfEngineAssets(baseDir?)`: Verifies filesystem existence of `legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts`, and `cmaps` under `node_modules/pdfjs-dist`.
+       - `getDeploymentHealth(options?)`: Produces a deterministic `DeploymentHealthPayload`:
+         ```ts
+         export type HealthStatus = "ok" | "degraded" | "error";
+
+         export interface DeploymentHealthPayload {
+           ok: boolean;
+           status: HealthStatus;
+           timestamp: string;
+           uptimeSeconds: number;
+           environment: string;
+           checks: {
+             pdfEngine: "ok" | "missing";
+             openaiConfigured: boolean;       // Strictly boolean; never leaks key value/prefix/length
+             youtubeProxyConfigured: boolean; // Strictly boolean; never leaks proxy URL
+           };
+           limits: {
+             maxPdfSizeBytes: number;         // 26_214_400
+             maxRealtimeContextChars: number; // 48_000
+           };
+           missingAssets?: string[];
+         }
+         ```
+       - `validateDockerfileSpec(content)` & `validateDockerignoreSpec(content)` and canonical manifest generators (`getCanonicalDockerfile()`, `getCanonicalDockerignore()`, `getCanonicalRenderManifest()`, `getCanonicalRailwayManifest()`).
+     - Implement `GET /api/health` (`src/app/api/health/route.ts`, `export const runtime = "nodejs"`) returning HTTP `200` (`status: "ok"` when `pdfEngine === "ok"` and `openaiConfigured === true`; `status: "degraded"` when `pdfEngine === "ok"` and `openaiConfigured === false`) or HTTP `503` (`status: "error"` when `pdfEngine === "missing"`), always with `Cache-Control: no-store`.
+- **Rationale**: A multi-stage `node:20-bookworm-slim` container that preserves pruned `node_modules/pdfjs-dist` on disk, runs as non-root `USER node`, binds `0.0.0.0:$PORT`, caps V8 old-space heap at `384 MB`, and exposes a zero-external-IO `/api/health` probe guarantees deterministic builds, fast cold starts, native `25 MB` PDF ingestion, and reliable zero-downtime deployments on Render and Railway without modifying protected Next.js configuration files.
+- **Consequences**:
+  - Container health checks immediately verify `pdfjs-dist` worker/font/CMap integrity on startup without spending OpenAI API quota.
+  - Evaluators testing on mobile over public HTTPS get uninterrupted WebRTC voice sessions and `25 MB` PDF extraction.
+

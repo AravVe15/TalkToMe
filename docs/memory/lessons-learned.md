@@ -233,6 +233,29 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Client DSP Anti-Feedback Synergy**:
   - Hardware Acoustic Echo Cancellation (`echoCancellation: true`), Noise Suppression (`noiseSuppression: true`), Auto Gain Control (`autoGainControl: true`), and `track.contentHint = "speech"` in `getUserMedia` constraints synergize with the server-side VAD threshold to eliminate false barge-in loops on mobile loudspeakers and desktop environments.
 
+---
+
+## 20. Production Containerization: `pdfjs-dist` Dynamic Asset Preservation, V8 Heap Sizing & Agent Manifest Boundaries
+
+- **Why Naive Next.js Standalone Tracing Breaks `pdfjs-dist` Dynamic `webpackIgnore` Imports**:
+  - As established in Section 8, `src/lib/ingest/pdf.ts` uses `/* webpackIgnore: true */ import(workerUrl)` to load `node_modules/pdfjs-dist/legacy/build/pdf.mjs` and `pdf.worker.mjs` directly from the Node.js filesystem and resolves `standard_fonts/` and `cmaps/` via `path.join(process.cwd(), "node_modules", "pdfjs-dist")`.
+  - Next.js's static file tracer (`@vercel/nft`) ignores dynamic `/* webpackIgnore: true */` imports. Furthermore, `next.config.ts` is a protected configuration file under `AGENTS.md`.
+  - *Solution (`ADR-13`)*: Use a multi-stage `node:20-bookworm-slim` `Dockerfile` (`builder` -> `runner`) that runs `npm ci`, `npm run build`, and `npm prune --omit=dev`, and copies the pruned `/app/node_modules` (which contains strictly the 4 production dependencies: `next`, `react`, `react-dom`, and the complete `pdfjs-dist` package with `legacy/build/`, `standard_fonts/`, and `cmaps/`) into `/app/node_modules` in the `runner` stage. This guarantees 100% runtime asset availability at `process.cwd()/node_modules/pdfjs-dist` without modifying `next.config.ts`.
+- **Container Memory Budgeting for 25 MB PDF Ingestion**:
+  - Processing a `25 MB` (`26,214,400`-byte) PDF involves reading the multipart `ArrayBuffer`, cloning an independent `Uint8Array` for worker transfer (`src/lib/ingest/pdf.ts`), and building the `pdfjs-dist` page operator/text trees (`~90–120 MB` transient allocation above the `~90 MB` Next.js baseline).
+  - Setting `NODE_OPTIONS="--max-old-space-size=384"` in the container environment forces V8 to garbage-collect detached PDF buffers proactively before approaching a `512 MB` container cgroup OOM ceiling, while `ingestionCache` (`ADR-12`) caches only the extracted string (`~50–200 KB`), never raw binary PDF buffers.
+- **Agent Permission Alignment for Deployment Slice (`src/lib/deploy/` + Root Container Manifests)**:
+  - In `.agents/agents/test-writer.md`, `read_file` is scoped to `tests/`, `docs/memory/{requirements,decisions}.md`, `package.json`, `tsconfig.json`, and `vitest.config.ts`. In `.agents/agents/implementer.md`, `write_file` is pre-authorized for `src/` and `docs/memory/{ai-usage-log,lessons-learned}.md`.
+  - By encapsulating all runtime port/hostname resolution, `pdfjs-dist` asset readiness checks, `/api/health` diagnostics, and canonical `Dockerfile`/`.dockerignore`/Render/Railway manifest generators & validators inside `src/lib/deploy/config.ts` and `src/app/api/health/route.ts`, `test-writer` and `implementer` can execute the full TDD cycle (`AC-13.1`–`AC-13.5`) strictly within `tests/` and `src/`.
+  - *Optional Proposed Rule/Manifest Addition for User Review (per Planner Responsibility #8)*: If the user wishes `implementer` to also write root `Dockerfile`, `.dockerignore`, `render.yaml`, and `railway.json` without interactive confirmation prompts in default mode, add the following 4 lines to `permissions.allow` in `.agents/agents/implementer.md`:
+    ```yaml
+    - write_file(Dockerfile)
+    - write_file(.dockerignore)
+    - write_file(render.yaml)
+    - write_file(railway.json)
+    ```
+
+
 
 
 

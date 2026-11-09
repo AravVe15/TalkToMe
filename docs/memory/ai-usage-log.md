@@ -40,6 +40,8 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-08 | WebRTC Audio Stream Persistence & Autoplay Invariants | Planner | Gemini 3.8 Flash (High) | Institutionalized WebRTC HTML5 `<audio>` stream persistence and autoplay invariants into ADR-06 & ADR-07 in `decisions.md`; updated AC-07 & AC-11 in `requirements.md` with explicit acceptance criteria for post-interruption voice resumption without repeated user activation; documented Section 17 ("The Mock Divergence Trap") in `lessons-learned.md`. | `read_file`, `edit_file` | Updated `docs/memory/decisions.md`, `docs/memory/requirements.md`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | WebRTC Stream Persistence & Autoplay Invariant Tests (Slice 3C) | Test-Writer | Gemini 3.8 Flash (High) | Eliminated mock divergence in `tests/fixtures/webrtc-fixtures.ts` (`MockHTMLAudioElement` tracking `paused`/`muted` stream states) and updated `tests/unit/realtime/controls.test.ts` per updated ADR-06, ADR-07, and AC-07/AC-11: asserted `mockAudioElement.pause` is strictly never called during interruptions, asserted client silencing without revoking user activation, asserted no redundant `response.cancel` on Server VAD barge-in (AC-07.4), and added 4 new multi-turn resumption test cases (AC-07.3, AC-07.5). Verified clean test execution establishing the expected RED state (7 failing tests across interruption suites). | `read_file`, `edit_file`, `run_command` (`npx vitest`, `npm test`) | Updated `tests/fixtures/webrtc-fixtures.ts`, `tests/unit/realtime/webrtc-fixtures.test.ts`, and `tests/unit/realtime/controls.test.ts`. 259 tests passing, 7 targeted tests failing in RED state. |
 | 2026-11-08 | WebRTC Audio Persistence, Client Muting & Server VAD Race Remediation | Implementer | Gemini 3.8 Flash (High) | Resolved post-interruption audio silence and browser autoplay lockouts: ensured `<audio>` element is never paused during active call, applied instantaneous client muting on interrupt/barge-in, cleanly unmuted on subsequent turns in `ensureAudioPlayback()`, eliminated redundant server cancellation dispatches on Server VAD barge-in (AC-07.4), augmented ambient types to resolve shims without modifying tests, and eliminated empty `.catch()` swallows. Verified `npm run verify` passes completely (tsc, lint, and 266/266 tests green). | `read_file`, `edit_file`, `run_command` (`npm test`, `npm run typecheck`, `npm run lint`, `npm run verify`) | Updated `src/lib/realtime/controls.ts`, `src/lib/realtime/connection.ts`, `src/app/page.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. All 15 suites and 266 tests pass. |
+| 2026-11-08 | Slice 5: Production Hosting & Container Deployment Architecture | Planner | Gemini 4 Argon (High) | Conducted end-to-end architectural evaluation for production containerization and public cloud hosting (Render / Railway) per Deliverable #1. Authored `ADR-13` in `decisions.md`, `AC-13` (`AC-13.1`–`AC-13.5`) and Section 2.6 in `requirements.md`, and Section 20 in `lessons-learned.md` covering multi-stage `node:20-bookworm-slim` builds, `pdfjs-dist` dynamic worker/font/CMap preservation without modifying `next.config.ts`, `NODE_OPTIONS` heap sizing for 25 MB PDFs, `GET /api/health` readiness probes with strict secret redaction, public HTTPS WebRTC topology, and the downstream execution plan for `test-writer`, `implementer`, and `reviewer`. | `read_file`, `edit_file` | Updated `docs/memory/decisions.md` (ADR-13), `docs/memory/requirements.md` (Section 2.6, AC-13), `docs/memory/lessons-learned.md` (§20), and `docs/memory/ai-usage-log.md`. |
+| 2026-11-08 | Slice 5: Production Containerization & Deployment Health Unit Tests | Test-Writer | Gemini 3.8 Flash (High) | Authored comprehensive test suite for Slice 5 (`tests/unit/deploy/deployment.test.ts`) covering AC-13.1–AC-13.4 and ADR-13: GET /api/health and getDeploymentHealth() readiness checks, 4 required pdfjs-dist asset checks, canary secret non-leakage, container port/hostname resolution (10000, 8080, invalid fallbacks to 3000), and multi-stage Dockerfile / .dockerignore / Render / Railway manifest specifications. Added ambient module declarations to `tests/types/shims.d.ts`. Verified clean TypeScript typechecking (0 errors) and confirmed clean RED phase test failure. | `read_file`, `edit_file`, `write_file`, `run_command` (`npx tsc`, `npx vitest`) | Created `tests/unit/deploy/deployment.test.ts`, updated `tests/types/shims.d.ts`, and updated `docs/memory/ai-usage-log.md`. Clean RED phase confirmed. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -770,6 +772,44 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero modifications to `tests/`, `package.json`, or configuration files.
   - Zero access or reads to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Planner — Slice 5: Production Hosting & Container Deployment Architecture)
+- **Agent**: `planner`
+- **Model**: Gemini 4 Argon (High)
+- **Task**: Architected the production-grade containerization and public cloud hosting strategy (Render / Railway) to satisfy Deliverable #1 of `assignment.pdf`:
+  1. **Codified `ADR-13` in `docs/memory/decisions.md`**:
+     - Specified a two-stage `node:20-bookworm-slim` container build (`builder` -> `runner`) that runs `npm ci`, `npm run build`, and `npm prune --omit=dev`, preserves `/app/node_modules/pdfjs-dist` (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts/`, `cmaps/`) on disk without modifying `next.config.ts`, executes as non-root `USER node`, binds `0.0.0.0:${PORT:-3000}` via PID-preserving `exec`, and configures `NODE_OPTIONS="--max-old-space-size=384"` to prevent OOM during `25 MB` PDF buffer clones.
+     - Enforced `.dockerignore` build-context isolation excluding `.env`, `.env.*`, `.git`, `node_modules`, `.next`, and `tests`.
+     - Defined `src/types/deploy.ts`, `src/lib/deploy/config.ts`, and `GET /api/health` (`src/app/api/health/route.ts`) contracts to validate `pdfjs-dist` disk assets, dynamic port/hostname resolution, canonical container/platform manifest specifications, and strictly boolean secret configuration status (`openaiConfigured`, `youtubeProxyConfigured`).
+  2. **Added Section 2.6 & `AC-13` (`AC-13.1`–`AC-13.5`) in `docs/memory/requirements.md`**:
+     - Established verifiable acceptance criteria for `/api/health` readiness probes, strict secret redaction, `PORT`/`HOSTNAME` resolution, multi-stage `Dockerfile` and `.dockerignore` validation, and public HTTPS WebRTC + 25 MB ingestion verification.
+  3. **Added Section 20 in `docs/memory/lessons-learned.md`**:
+     - Documented why Next.js `@vercel/nft` standalone tracing misses `/* webpackIgnore: true */` `pdfjs-dist` imports, V8 heap budgeting for 25 MB PDFs, and proposed an optional 4-line allow-list extension in `.agents/agents/implementer.md` for root container manifests (`Dockerfile`, `.dockerignore`, `render.yaml`, `railway.json`).
+- **Strict Boundary Adherence**:
+  - Read-only on `src/`, `tests/`, and configuration files; edited strictly `docs/memory/{decisions,requirements,lessons-learned,ai-usage-log}.md`.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Test-Writer — Slice 5 Production Containerization & Deployment Health Unit Tests)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Authored full unit test suite and ambient type definitions for Slice 5 (Production Containerization, Health Verification & Public Cloud Deployment) per `ADR-13` and `AC-13.1`–`AC-13.4`:
+  1. **Ambient Type Shims (`tests/types/shims.d.ts`)**:
+     - Added ambient module declarations for `@/types/deploy`, `@/lib/deploy/config`, and `@/app/api/health/route` declaring `HealthStatus`, `DeploymentChecks`, `DeploymentLimits`, `DeploymentHealthPayload`, `DeploymentConfig`, `ValidationResult`, `resolveServerPort()`, `resolveBindHostname()`, `checkPdfEngineAssets()`, `getDeploymentHealth()`, canonical manifest generators, spec validators, and `GET /api/health` handler.
+  2. **Test Suite Authoring (`tests/unit/deploy/deployment.test.ts`)**:
+     - `AC-13.1`: Verified `GET /api/health` and `getDeploymentHealth()` return HTTP 200 (`status: "ok"`) when `OPENAI_API_KEY` is set and all 4 `pdfjs-dist` assets exist (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts`, `cmaps`); return HTTP 200 (`status: "degraded"`) when `OPENAI_API_KEY` is missing or whitespace-only; and return HTTP 503 (`status: "error"`, `checks.pdfEngine: "missing"`, `missingAssets`) when any of the 4 assets is absent from disk under `pdfBaseDir`. Verified `Cache-Control: no-store` header.
+     - `AC-13.2`: Tested canary secrets (`sk-proj-canary-secret-99999` and `http://user:pass@proxy.example.com:8080`) passed into `getDeploymentHealth({ env })` and `GET /api/health`, asserting that neither the serialized JSON payload nor HTTP headers contain any substring of the canary secrets, and confirming strictly boolean indicators.
+     - `AC-13.3`: Tested `resolveServerPort()` dynamic port parsing (`10000`, `8080`, `5000`, `1`, `65535`) and fallback to `3000` on unset, empty, negative, zero, out-of-range (`70000`), or non-numeric (`"abc"`, `"3000.5"`) values; tested `resolveBindHostname()` defaulting to `"0.0.0.0"` with custom hostname override support.
+     - `AC-13.4`: Tested `getCanonicalDockerfile()`, `validateDockerfileSpec()`, `getCanonicalDockerignore()`, `validateDockerignoreSpec()`, `getCanonicalRenderManifest()`, and `getCanonicalRailwayManifest()` verifying multi-stage `node:20-bookworm-slim`, `npm ci`, `npm run build`, `npm prune --omit=dev`, `NODE_OPTIONS="--max-old-space-size=384"`, unprivileged `USER node`, `0.0.0.0`, `${PORT:-3000}`, `/api/health` probe path, and active rejection of hardcoded secrets, `COPY .env`, and missing artifact exclusions.
+  3. **Verification**:
+     - Verified `npx tsc --noEmit` exits with code 0 (zero type errors).
+     - Ran `npx vitest run tests/unit/deploy/deployment.test.ts` to confirm clean RED phase failure (`Cannot find module '@/lib/deploy/config'`).
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`. All tests authored strictly from `docs/memory/decisions.md` and `docs/memory/requirements.md`.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
 
 
 

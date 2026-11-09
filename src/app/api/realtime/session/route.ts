@@ -20,7 +20,7 @@ export const runtime = "nodejs";
 
 const OPENAI_REALTIME_SESSIONS_URL =
   "https://api.openai.com/v1/realtime/sessions";
-const DEFAULT_REALTIME_MODEL = "gpt-4o-realtime-preview";
+const DEFAULT_REALTIME_MODEL = "gpt-4o-mini-realtime-preview";
 const DEFAULT_REALTIME_VOICE = "alloy";
 const SESSION_MINT_TIMEOUT_MS = 15_000;
 
@@ -130,7 +130,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const model =
     typeof process.env.OPENAI_REALTIME_MODEL === "string" &&
-    process.env.OPENAI_REALTIME_MODEL.trim().length > 0
+      process.env.OPENAI_REALTIME_MODEL.trim().length > 0
       ? process.env.OPENAI_REALTIME_MODEL.trim()
       : DEFAULT_REALTIME_MODEL;
 
@@ -162,7 +162,7 @@ export async function POST(req: Request): Promise<Response> {
       : typeof body.threshold === "number"
         ? body.threshold
         : typeof process.env.OPENAI_REALTIME_VAD_THRESHOLD === "string" &&
-            !isNaN(parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD))
+          !isNaN(parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD))
           ? parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD)
           : 0.5;
 
@@ -174,7 +174,7 @@ export async function POST(req: Request): Promise<Response> {
         : typeof body.silenceDurationMs === "number"
           ? body.silenceDurationMs
           : typeof process.env.OPENAI_REALTIME_VAD_SILENCE_MS === "string" &&
-              !isNaN(parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10))
+            !isNaN(parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10))
             ? parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10)
             : 500;
 
@@ -385,19 +385,19 @@ export async function POST(req: Request): Promise<Response> {
 
   const nestedSession =
     sessionData &&
-    typeof sessionData.session === "object" &&
-    sessionData.session !== null
+      typeof sessionData.session === "object" &&
+      sessionData.session !== null
       ? (sessionData.session as Record<string, unknown>)
       : null;
 
   const clientSecret =
     sessionData &&
-    typeof sessionData.client_secret === "object" &&
-    sessionData.client_secret !== null
+      typeof sessionData.client_secret === "object" &&
+      sessionData.client_secret !== null
       ? (sessionData.client_secret as Record<string, unknown>)
       : nestedSession &&
-          typeof nestedSession.client_secret === "object" &&
-          nestedSession.client_secret !== null
+        typeof nestedSession.client_secret === "object" &&
+        nestedSession.client_secret !== null
         ? (nestedSession.client_secret as Record<string, unknown>)
         : null;
 
@@ -426,12 +426,12 @@ export async function POST(req: Request): Promise<Response> {
 
   const resolvedModel =
     sessionData &&
-    typeof sessionData.model === "string" &&
-    sessionData.model.trim().length > 0
+      typeof sessionData.model === "string" &&
+      sessionData.model.trim().length > 0
       ? sessionData.model.trim()
       : nestedSession &&
-          typeof nestedSession.model === "string" &&
-          nestedSession.model.trim().length > 0
+        typeof nestedSession.model === "string" &&
+        nestedSession.model.trim().length > 0
         ? nestedSession.model.trim()
         : model;
 

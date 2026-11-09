@@ -153,7 +153,7 @@ describe("Realtime Session Ephemeral Token Minting Route (AC-04, AC-05, AC-10.1)
       expect(res.status).toBe(200);
 
       expect(sentBody).not.toBeNull();
-      expect(sentBody!.model).toBe("gpt-4o-realtime-preview");
+      expect(sentBody!.model).toBe("gpt-4o-mini-realtime-preview");
       expect(sentBody!.modalities).toEqual(["audio", "text"]);
       expect(sentBody!.voice).toBe("alloy");
       expect(sentBody!.input_audio_transcription).toEqual({ model: "whisper-1" });

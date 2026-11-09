@@ -33,6 +33,7 @@ export interface RealtimeSessionRequestBody {
   title?: string;
   sourceType?: "pdf" | "youtube" | string;
   voice?: string;
+  model?: string;
 }
 
 export type RealtimeConnectionState =

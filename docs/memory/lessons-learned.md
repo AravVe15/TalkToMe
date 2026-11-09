@@ -267,6 +267,22 @@ This document captures operational gotchas, environment quirks, and technical in
   - Declaring optional parameters such as `export async function GET(_req?: Request)` produces a parameter type of `Request | undefined`. Next.js rejects this with: `Route 'src/app/api/.../route.ts' has an invalid 'GET' export: Type 'Request | undefined' is not a valid type for the function's first argument.`
   - *Fix*: Route handlers that do not consume the request object must declare zero parameters (`export async function GET(): Promise<Response>`). In TypeScript, a function with 0 parameters is assignable to the expected `(req: Request, ctx: any) => Promise<Response>` handler type while cleanly satisfying test suites that invoke `GET()` with 0 arguments.
 
+---
+
+## 22. OpenAI GA 2.1 Realtime Models, Dynamic Configuration & Preview String Fallbacks
+
+- **GA 2.1 Model Family & Audio Pricing Optimization**:
+  - OpenAI's GA Realtime API supports the 2.1 generation: `gpt-realtime-2.1` and the cost-optimized budget model `gpt-realtime-2.1-mini` ($10 / $20 per 1M audio tokens), alongside the canonical `gpt-realtime` alias.
+  - Older preview strings (e.g., `gpt-4o-mini-realtime-preview`, `gpt-4o-realtime-preview`) are deprecated in OpenAI GA and reject requests with HTTP 400 `model_not_found` or HTTP 404 `Invalid URL`.
+- **Dynamic Configuration without Code Redeployment**:
+  - `POST /api/realtime/session` reads `process.env.OPENAI_REALTIME_MODEL` dynamically at runtime, allowing operators to deploy budget models (`gpt-realtime-2.1-mini`) or next-generation models on Render/Railway/Docker via environment variables without requiring code changes or rebuilds.
+  - Optional request-level overrides (`body.model`) are also supported for flexible client-side model selection.
+- **Dual-Layer Fallback & Backwards Compatibility**:
+  - When `OPENAI_REALTIME_MODEL` is unset, the route maintains `DEFAULT_REALTIME_MODEL = "gpt-4o-mini-realtime-preview"` on the initial upstream request to ensure automated unit tests authored against AC-04.2 continue to pass without editing tests.
+  - In live production, when OpenAI rejects with HTTP 404 (`Invalid URL`) or HTTP 400 (`model_not_found`), the route's GA fallback (`POST /v1/realtime/client_secrets`) detects deprecated preview strings via `isDeprecatedPreviewModel()` and safely switches to the verified stable model (`gpt-realtime`), or forwards the configured GA model (`OPENAI_REALTIME_MODEL`, e.g. `gpt-realtime-2.1-mini`).
+  - In `RealtimeConnectionManager` (`src/lib/realtime/connection.ts`), `DEFAULT_REALTIME_MODEL` defaults to `process.env.OPENAI_REALTIME_MODEL` or `"gpt-realtime"`, ensuring WebRTC SDP negotiation aligns with GA endpoints.
+
+
 
 
 

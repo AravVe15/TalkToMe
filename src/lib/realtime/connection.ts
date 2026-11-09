@@ -65,7 +65,15 @@ export interface RealtimeSessionResources {
   audioElement?: HTMLAudioElement | null;
 }
 
-const DEFAULT_REALTIME_MODEL = "gpt-4o-realtime-preview";
+const envRealtimeModel =
+  typeof process !== "undefined" &&
+  process.env &&
+  typeof process.env.OPENAI_REALTIME_MODEL === "string" &&
+  process.env.OPENAI_REALTIME_MODEL.trim().length > 0
+    ? process.env.OPENAI_REALTIME_MODEL.trim()
+    : undefined;
+
+const DEFAULT_REALTIME_MODEL = envRealtimeModel ?? "gpt-realtime";
 const DEFAULT_RECONNECT_TIMEOUT_MS = 10_000;
 const OPENAI_REALTIME_BASE_URL = "https://api.openai.com/v1/realtime";
 const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";

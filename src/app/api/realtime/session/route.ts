@@ -21,8 +21,19 @@ export const runtime = "nodejs";
 const OPENAI_REALTIME_SESSIONS_URL =
   "https://api.openai.com/v1/realtime/sessions";
 const DEFAULT_REALTIME_MODEL = "gpt-4o-mini-realtime-preview";
+const STABLE_GA_REALTIME_MODEL = "gpt-realtime";
 const DEFAULT_REALTIME_VOICE = "alloy";
 const SESSION_MINT_TIMEOUT_MS = 15_000;
+
+function isDeprecatedPreviewModel(modelName?: string): boolean {
+  if (!modelName) return false;
+  const lower = modelName.toLowerCase().trim();
+  return (
+    lower.includes("preview") ||
+    lower.startsWith("gpt-4o-realtime") ||
+    lower.startsWith("gpt-4o-mini-realtime")
+  );
+}
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -128,11 +139,20 @@ export async function POST(req: Request): Promise<Response> {
       ? body.voice.trim()
       : DEFAULT_REALTIME_VOICE;
 
-  const model =
+  const envModel =
     typeof process.env.OPENAI_REALTIME_MODEL === "string" &&
-      process.env.OPENAI_REALTIME_MODEL.trim().length > 0
+    process.env.OPENAI_REALTIME_MODEL.trim().length > 0
       ? process.env.OPENAI_REALTIME_MODEL.trim()
-      : DEFAULT_REALTIME_MODEL;
+      : undefined;
+
+  const requestedModel =
+    typeof body.model === "string" && body.model.trim().length > 0
+      ? body.model.trim()
+      : undefined;
+
+  // Active realtime model: environment override takes precedence (e.g. gpt-realtime-2.1-mini, gpt-realtime-2.1),
+  // followed by optional request-level override, falling back to default preview model for test backwards compatibility.
+  const model = envModel ?? requestedModel ?? DEFAULT_REALTIME_MODEL;
 
   // AC-05.1 – AC-05.3: Build grounded session instructions with 48,000-char safe cap
   const prepared = buildSessionInstructions({
@@ -227,6 +247,8 @@ export async function POST(req: Request): Promise<Response> {
   }, SESSION_MINT_TIMEOUT_MS);
 
   let upstreamRes: Response;
+  let gaModelUsed = false;
+  let effectiveGaModel = STABLE_GA_REALTIME_MODEL;
   try {
     upstreamRes = await fetch(OPENAI_REALTIME_SESSIONS_URL, {
       method: "POST",
@@ -246,11 +268,22 @@ export async function POST(req: Request): Promise<Response> {
       const errMsg = errJson?.error?.message || "";
       const errCode = errJson?.error?.code || "";
       if (
+        upstreamRes.status === 404 ||
         errMsg.includes("Invalid URL") ||
         errCode === "model_not_found" ||
         errMsg.includes("does not exist")
       ) {
-        const gaModel = model;
+        // Resolve GA Realtime model: if candidate model is configured and not a deprecated preview model,
+        // use it (e.g. gpt-realtime-2.1-mini, gpt-realtime-2.1); otherwise safely fall back to verified stable model "gpt-realtime".
+        const candidateModel = envModel ?? requestedModel;
+        const gaModel =
+          candidateModel && !isDeprecatedPreviewModel(candidateModel)
+            ? candidateModel
+            : STABLE_GA_REALTIME_MODEL;
+
+        effectiveGaModel = gaModel;
+        gaModelUsed = true;
+
         upstreamRes = await fetch(
           "https://api.openai.com/v1/realtime/client_secrets",
           {
@@ -432,7 +465,9 @@ export async function POST(req: Request): Promise<Response> {
         typeof nestedSession.model === "string" &&
         nestedSession.model.trim().length > 0
         ? nestedSession.model.trim()
-        : model;
+        : gaModelUsed
+          ? effectiveGaModel
+          : model;
 
   // AC-04.3: Return ephemeralKey, expiresAt, model, and isContextTruncated with Cache-Control: no-store
   return Response.json(

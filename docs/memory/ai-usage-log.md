@@ -851,6 +851,32 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero access or reads to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
 
+## Session: 2026-11-08 (Implementer — OpenAI GA 2.1 Realtime Models & Dynamic Configuration)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Implemented support for OpenAI GA 2.1 Realtime models (`gpt-realtime-2.1`, `gpt-realtime-2.1-mini`) and dynamic configuration via environment variables:
+  1. **Dynamic Model Resolution (`src/app/api/realtime/session/route.ts`)**:
+     - Configured `POST /api/realtime/session` to read `process.env.OPENAI_REALTIME_MODEL` dynamically at runtime, enabling cost-optimized models such as `gpt-realtime-2.1-mini` ($10 / $20 per 1M audio tokens) in production without code redeployments.
+     - Added optional request body `model` parameter support (`RealtimeSessionRequestBody.model`).
+     - Maintained `DEFAULT_REALTIME_MODEL = "gpt-4o-mini-realtime-preview"` on the initial request payload when `OPENAI_REALTIME_MODEL` is unset to preserve backwards compatibility with existing unit tests asserting AC-04.2 parameter shapes.
+  2. **Safe GA Fallback & Deprecated Preview Model Detection**:
+     - Implemented `isDeprecatedPreviewModel()` to detect older preview model strings (such as `gpt-4o-mini-realtime-preview` and `gpt-4o-realtime-preview`) that reject with HTTP 400 `model_not_found` or HTTP 404 `Invalid URL` on OpenAI GA endpoints.
+     - On upstream 404/400 fallback to `POST https://api.openai.com/v1/realtime/client_secrets`, dynamically forwards the configured GA model if set (`envModel` or `requestedModel`), or safely falls back to the verified stable model (`STABLE_GA_REALTIME_MODEL = "gpt-realtime"`).
+     - Calculated `resolvedModel` so the active model is returned in the client response payload (`json.model`) and passed to the WebRTC connection layer.
+  3. **Connection Layer Alignment (`src/lib/realtime/connection.ts` & `src/types/realtime.ts`)**:
+     - Updated `RealtimeConnectionManager` default fallback model from preview string to `process.env.OPENAI_REALTIME_MODEL ?? "gpt-realtime"`.
+     - Added optional `model?: string` to `RealtimeSessionRequestBody` in `src/types/realtime.ts`.
+  4. **Verification**:
+     - Executed `npm run verify` (`tsc --noEmit && next lint && vitest run`): 16/16 test suites passed (287/287 tests green), 0 TypeScript errors, 0 ESLint warnings or errors.
+     - Executed `npm run build` (`next build`): Compiled successfully in 4.4s, static pages generated (8/8), exit code 0.
+  5. **Documentation**:
+     - Recorded operational findings in Section 22 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/app/api/realtime/session/route.ts`, `src/lib/realtime/connection.ts`, `src/types/realtime.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
 
 
 

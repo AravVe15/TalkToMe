@@ -1,0 +1,10 @@
+# TalkToMe Container Build Exclusions (ADR-13 / AC-13.4)
+.env
+.env.*
+node_modules
+.next
+.git
+tests
+coverage
+docs/memory
+*.log

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: talktome
+    runtime: docker
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: YOUTUBE_PROXY_URL
+        sync: false

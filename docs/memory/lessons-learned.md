@@ -254,6 +254,10 @@ This document captures operational gotchas, environment quirks, and technical in
     - write_file(render.yaml)
     - write_file(railway.json)
     ```
+- **Zero-External-IO Operational Readiness (`/api/health`)**:
+  - The health check evaluates local filesystem integrity of `pdfjs-dist` assets (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts`, `cmaps`) and verifies environment variables without external network egress or consuming OpenAI quota.
+  - Returns HTTP 200 with `status: "ok"` when fully configured, `status: "degraded"` when `OPENAI_API_KEY` is missing/whitespace, and HTTP 503 with `status: "error"` and `missingAssets` when required PDF assets are missing from disk, always with `Cache-Control: no-store` and complete secret redaction.
+
 
 
 

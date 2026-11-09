@@ -809,6 +809,32 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero access or reads to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
 
+## Session: 2026-11-08 (Implementer — Slice 5: Production Containerization & Deployment Health Verification)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Implemented production deployment contracts, container specifications, and `/api/health` readiness probe for Slice 5 per `ADR-13` and `AC-13.1`–`AC-13.5`:
+  1. **Deployment Contracts & Types (`src/types/deploy.ts`)**:
+     - Defined `HealthStatus`, `DeploymentChecks`, `DeploymentLimits`, `DeploymentHealthPayload`, `DeploymentConfig`, and `ValidationResult`.
+  2. **Deployment Configuration & Manifest Generation (`src/lib/deploy/config.ts`)**:
+     - Implemented `resolveServerPort(env?)` parsing integer ports in `[1, 65535]` with strict integer validation falling back to `DEFAULT_SERVER_PORT` (`3000`).
+     - Implemented `resolveBindHostname(env?)` defaulting to `DEFAULT_BIND_HOSTNAME` (`"0.0.0.0"`).
+     - Implemented `checkPdfEngineAssets(baseDir?)` verifying local presence of all 4 required `pdfjs-dist` assets (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts`, `cmaps`).
+     - Implemented `getDeploymentHealth(options?)` returning deterministic health status (`"ok"`, `"degraded"`, `"error"`) with complete secret redaction, strictly boolean configuration indicators, and memory limits (`maxPdfSizeBytes: 26214400`, `maxRealtimeContextChars: 48000`).
+     - Implemented `getCanonicalDockerfile()`, `validateDockerfileSpec(content)`, `getCanonicalDockerignore()`, `validateDockerignoreSpec(content)`, `getCanonicalRenderManifest()`, and `getCanonicalRailwayManifest()`.
+  3. **Readiness Probe Route (`src/app/api/health/route.ts`)**:
+     - Implemented `GET /api/health` with `runtime = "nodejs"`, returning HTTP 200 (`ok` / `degraded`) or HTTP 503 (`error`) with header `Cache-Control: no-store` and complete canary credential redaction.
+  4. **Materialized Root Manifests**:
+     - Materialized root `Dockerfile`, `.dockerignore`, `render.yaml`, and `railway.json` matching the canonical generators.
+  5. **Verification**:
+     - Executed `npm run verify` (`tsc --noEmit && next lint && vitest run`).
+     - All 16 test suites (287 unit tests) passed cleanly (100% pass rate). 0 TypeScript errors, 0 ESLint warnings or errors.
+- **Strict Boundary Adherence**:
+  - Implemented strictly production files in `src/`, root deployment manifests (`Dockerfile`, `.dockerignore`, `render.yaml`, `railway.json`), and memory logs (`docs/memory/lessons-learned.md`, `docs/memory/ai-usage-log.md`).
+  - Zero modifications to test files in `tests/` or protected project configuration files (`package.json`, `tsconfig.json`, `next.config.ts`, `vitest.config.ts`, `.gitignore`, `README.md`).
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
 
 
 

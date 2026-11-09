@@ -834,6 +834,24 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero access or reads to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
 
+## Session: 2026-11-08 (Implementer — Next.js 15 App Router Health Route Handler Signature Fix)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Fixed Next.js 15 App Router route type validation error on `src/app/api/health/route.ts`:
+  1. **Route Handler Signature Adjustment (`src/app/api/health/route.ts`)**:
+     - Updated `export async function GET()` to declare zero arguments (`() => Promise<Response>`), eliminating `Request | undefined` from the first parameter type to satisfy Next.js 15 `.next/types` route export validation.
+  2. **Verification**:
+     - Executed `npm run build` (`next build`): Compiled successfully in 9.2s, passed route type validation, and generated all 8 static and dynamic routes (`/`, `/_not-found`, `/api/health`, `/api/ingest/pdf`, `/api/ingest/youtube`, `/api/realtime/session`) with exit code 0.
+     - Executed `npm run verify` (`tsc --noEmit && next lint && vitest run`): 16/16 test suites passed (287/287 tests green), 0 TypeScript errors, 0 ESLint warnings or errors.
+  3. **Documentation**:
+     - Recorded operational gotcha in Section 21 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/app/api/health/route.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
 
 
 

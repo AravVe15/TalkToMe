@@ -258,6 +258,16 @@ This document captures operational gotchas, environment quirks, and technical in
   - The health check evaluates local filesystem integrity of `pdfjs-dist` assets (`legacy/build/pdf.mjs`, `legacy/build/pdf.worker.mjs`, `standard_fonts`, `cmaps`) and verifies environment variables without external network egress or consuming OpenAI quota.
   - Returns HTTP 200 with `status: "ok"` when fully configured, `status: "degraded"` when `OPENAI_API_KEY` is missing/whitespace, and HTTP 503 with `status: "error"` and `missingAssets` when required PDF assets are missing from disk, always with `Cache-Control: no-store` and complete secret redaction.
 
+---
+
+## 21. Next.js 15 App Router Route Handler Export Signatures (`GET` Parameter Typing)
+
+- **`Request | undefined` vs. Next.js Route Type Validation**:
+  - In Next.js 15, route handlers exported from `src/app/**/route.ts` are strictly validated by `.next/types` using `checkFields<Diff<AppRouteHandlerRoutes[...], ...>>()`.
+  - Declaring optional parameters such as `export async function GET(_req?: Request)` produces a parameter type of `Request | undefined`. Next.js rejects this with: `Route 'src/app/api/.../route.ts' has an invalid 'GET' export: Type 'Request | undefined' is not a valid type for the function's first argument.`
+  - *Fix*: Route handlers that do not consume the request object must declare zero parameters (`export async function GET(): Promise<Response>`). In TypeScript, a function with 0 parameters is assignable to the expected `(req: Request, ctx: any) => Promise<Response>` handler type while cleanly satisfying test suites that invoke `GET()` with 0 arguments.
+
+
 
 
 

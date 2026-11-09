@@ -15,7 +15,7 @@ const NO_STORE_HEADERS = {
   "Content-Type": "application/json",
 } as const;
 
-export async function GET(_req?: Request): Promise<Response> {
+export async function GET(): Promise<Response> {
   const health = getDeploymentHealth();
   const statusCode = health.status === "error" ? 503 : 200;
 

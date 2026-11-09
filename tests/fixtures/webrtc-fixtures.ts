@@ -180,11 +180,17 @@ export class MockRTCPeerConnection {
 
 export class MockHTMLAudioElement {
   srcObject: unknown = null;
-  autoplay: boolean = false;
-  playsInline: boolean = false;
+  autoplay: boolean = true;
+  playsInline: boolean = true;
+  paused: boolean = false;
+  muted: boolean = false;
 
-  play = vi.fn(async () => {});
-  pause = vi.fn(() => {});
+  play = vi.fn(async () => {
+    this.paused = false;
+  });
+  pause = vi.fn(() => {
+    this.paused = true;
+  });
 }
 
 /**

@@ -1,21 +1,21 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import type { IngestionResult } from "@/types/ingest";
-import type {
-  RealtimeConnectionState,
-  RealtimeConversationState,
-} from "@/lib/realtime/connection";
-import type { MicStatus } from "@/lib/realtime/controls";
+import {
+  RealtimeConnectionManager,
+  cleanupSession,
+  type RealtimeConnectionState,
+  type RealtimeConversationState,
+} from "../lib/realtime/connection";
 import {
   TranscriptManager,
   type TranscriptItem,
-} from "@/lib/realtime/transcript";
-import { cleanupSession } from "@/lib/realtime/connection";
+} from "../lib/realtime/transcript";
 import {
   RealtimeControlsManager,
-  setupRecvonlyTransceiver,
-} from "@/lib/realtime/controls";
+  type MicStatus,
+} from "../lib/realtime/controls";
 import { SourceIngestion } from "@/components/SourceIngestion";
 import {
   SourcePreview,
@@ -74,7 +74,8 @@ export default function Home(props: any) {
     safeProps.initialError ?? null
   );
   const [textFallbackState, setTextFallbackState] = useState<boolean>(
-    safeProps.initialTextFallback ?? (safeProps.initialMicStatus === "unavailable")
+    safeProps.initialTextFallback ??
+      (safeProps.initialMicStatus === "unavailable")
   );
   const [previewExpandedState, setPreviewExpandedState] = useState<boolean>(
     safeProps.previewExpanded ?? false
@@ -82,7 +83,9 @@ export default function Home(props: any) {
 
   // Active / controlled values honoring props if explicitly passed
   const source =
-    safeProps.initialSource !== undefined ? safeProps.initialSource : sourceState;
+    safeProps.initialSource !== undefined
+      ? safeProps.initialSource
+      : sourceState;
   const connectionState =
     safeProps.initialConnectionState !== undefined
       ? (safeProps.initialConnectionState as RealtimeConnectionState)
@@ -100,50 +103,58 @@ export default function Home(props: any) {
       ? safeProps.initialMicStatus
       : micStatusState;
   const isMuted =
-    safeProps.initialMuted !== undefined ? safeProps.initialMuted : isMutedState;
+    safeProps.initialMuted !== undefined
+      ? safeProps.initialMuted
+      : isMutedState;
   const error =
     safeProps.initialError !== undefined ? safeProps.initialError : errorState;
   const isTextFallback =
     safeProps.initialTextFallback !== undefined
       ? safeProps.initialTextFallback
-      : (micStatus === "unavailable" || textFallbackState);
+      : micStatus === "unavailable" || textFallbackState;
   const isPreviewExpanded =
     safeProps.previewExpanded !== undefined
       ? safeProps.previewExpanded
       : previewExpandedState;
 
-  // Refs for WebRTC resources
+  // Refs for Slice 3 managers and WebRTC resources
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const dataChannelRef = useRef<RTCDataChannel | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
+  const connectionManagerRef = useRef<RealtimeConnectionManager | null>(null);
   const controlsManagerRef = useRef<RealtimeControlsManager | null>(null);
   const transcriptManagerRef = useRef<TranscriptManager | null>(null);
-  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper to deterministically tear down active WebRTC resources without overwriting target state
+  const teardownActiveSession = useCallback(() => {
+    if (connectionManagerRef.current) {
+      connectionManagerRef.current.disconnect();
+      connectionManagerRef.current = null;
+    } else if (audioRef.current) {
+      cleanupSession({ audioElement: audioRef.current });
+    }
+    controlsManagerRef.current = null;
+    transcriptManagerRef.current = null;
+  }, []);
 
   // Deterministic teardown on component unmount (ADR-06 / AC-06.2)
   useEffect(() => {
     const currentAudio = audioRef.current;
     return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
+      if (connectionManagerRef.current) {
+        connectionManagerRef.current.disconnect();
+        connectionManagerRef.current = null;
+      } else {
+        cleanupSession({ audioElement: currentAudio });
       }
-      cleanupSession({
-        peerConnection: peerConnectionRef.current,
-        dataChannel: dataChannelRef.current,
-        localStream: localStreamRef.current,
-        audioElement: currentAudio,
-      });
     };
   }, []);
 
   // PDF Ingestion (Slice 1)
   const handlePdfSelected = async (file: File) => {
+    // 1. Clean up any active call first before entering "ingesting" state
+    teardownActiveSession();
+    setConversationStateState("listening");
     setErrorState(null);
     setConnectionStateState("ingesting");
-
-    // Clean up active session when switching sources
-    handleStopVoiceChat();
 
     const formData = new FormData();
     formData.append("file", file);
@@ -156,7 +167,7 @@ export default function Home(props: any) {
       const data: IngestionResult = await res.json();
       if (!data.ok) {
         setErrorState(data.message || "Failed to extract text from PDF.");
-        setConnectionStateState("idle");
+        setConnectionStateState(source ? "ready" : "idle");
       } else {
         setSourceState({
           sourceType: data.sourceType,
@@ -172,17 +183,17 @@ export default function Home(props: any) {
       setErrorState(
         err instanceof Error ? err.message : "Network error during PDF upload."
       );
-      setConnectionStateState("idle");
+      setConnectionStateState(source ? "ready" : "idle");
     }
   };
 
   // YouTube Ingestion (Slice 1)
   const handleYouTubeSubmit = async (url: string) => {
+    // 1. Clean up any active call first before entering "ingesting" state
+    teardownActiveSession();
+    setConversationStateState("listening");
     setErrorState(null);
     setConnectionStateState("ingesting");
-
-    // Clean up active session when switching sources
-    handleStopVoiceChat();
 
     try {
       const res = await fetch("/api/ingest/youtube", {
@@ -193,7 +204,7 @@ export default function Home(props: any) {
       const data: IngestionResult = await res.json();
       if (!data.ok) {
         setErrorState(data.message || "Failed to extract YouTube transcript.");
-        setConnectionStateState("idle");
+        setConnectionStateState(source ? "ready" : "idle");
       } else {
         setSourceState({
           sourceType: data.sourceType,
@@ -211,272 +222,149 @@ export default function Home(props: any) {
           ? err.message
           : "Network error during YouTube ingestion."
       );
-      setConnectionStateState("idle");
+      setConnectionStateState(source ? "ready" : "idle");
     }
   };
 
   // Start / Reconnect Voice Session (Slices 2 & 3)
   const handleStartVoiceChat = async () => {
     if (!source) return;
+
+    teardownActiveSession();
     setErrorState(null);
+    setIsMutedState(false);
+    setMicStatusState("available");
+    setTextFallbackState(false);
     setConnectionStateState("connecting");
 
     // Synchronous audio gesture unlock for iOS Safari (ADR-11 / AC-11.3)
     if (audioRef.current) {
       try {
-        void audioRef.current.play?.().catch(() => {});
-      } catch {
-        // Ignore audio play errors during user gesture
-      }
-    }
-
-    // 1. Microphone access detection (ADR-09)
-    let micUnavailable = false;
-    let stream: MediaStream | null = null;
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      micUnavailable = true;
-    } else {
-      try {
-        // Hardware Acoustic Echo Cancellation & Anti-Feedback Constraints (ADR-11 / AC-11.5)
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-        localStreamRef.current = stream;
-
-        // Set speech content hint to optimize WebKit VoiceProcessingIO hardware DSP
-        for (const track of stream.getAudioTracks()) {
-          try {
-            track.contentHint = "speech";
-          } catch {
-            // Ignore if not supported in environment
-          }
-        }
-      } catch {
-        micUnavailable = true;
-      }
-    }
-
-    if (micUnavailable) {
-      setMicStatusState("unavailable");
-      setTextFallbackState(true);
-    } else {
-      setMicStatusState("available");
-      setTextFallbackState(false);
-    }
-
-    // 2. Fetch ephemeral session token from backend route (ADR-04, Slice 2)
-    let ephemeralKey = "";
-    let model = "gpt-4o-realtime-preview";
-    try {
-      const tokenRes = await fetch("/api/realtime/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: source.text,
-          title: source.title,
-          sourceType: source.sourceType,
-        }),
-      });
-
-      const tokenData = await tokenRes.json();
-      if (!tokenData.ok) {
-        setErrorState(
-          tokenData.message || "Failed to mint Realtime session token."
-        );
-        setConnectionStateState("error");
-        return;
-      }
-
-      ephemeralKey = tokenData.ephemeralKey;
-      if (tokenData.model) {
-        model = tokenData.model;
-      }
-    } catch (err) {
-      setErrorState(
-        err instanceof Error
-          ? err.message
-          : "Network error minting session token."
-      );
-      setConnectionStateState("error");
-      return;
-    }
-
-    // 3. Setup RTCPeerConnection & Audio Transport (Slice 3A)
-    try {
-      const pc = new RTCPeerConnection();
-      peerConnectionRef.current = pc;
-
-      if (micUnavailable) {
-        // Add recvonly transceiver for mic-less text fallback (ADR-09 / AC-09.1)
-        setupRecvonlyTransceiver(pc);
-      } else if (stream) {
-        for (const track of stream.getTracks()) {
-          pc.addTrack(track, stream);
-        }
-      }
-
-      // Attach remote audio track to <audio> element
-      pc.ontrack = (event: RTCTrackEvent) => {
-        const remoteStream = event.streams?.[0] ?? null;
-        if (audioRef.current && remoteStream) {
-          audioRef.current.srcObject = remoteStream;
-          void audioRef.current.play?.().catch(() => {});
-        }
-      };
-
-      // 4. Create oai-events data channel
-      const dc = pc.createDataChannel("oai-events");
-      dataChannelRef.current = dc;
-
-      // 5. Initialize TranscriptManager (Slice 3B)
-      const tm = new TranscriptManager({
-        initialItems: transcript,
-        onTranscriptChange: (items) => setTranscriptState([...items]),
-        onConversationStateChange: (cState) =>
-          setConversationStateState(cState),
-      });
-      transcriptManagerRef.current = tm;
-
-      // 6. Initialize RealtimeControlsManager (Slice 3C)
-      const controls = new RealtimeControlsManager({
-        peerConnection: pc,
-        dataChannel: dc,
-        localAudioTrack: stream?.getAudioTracks?.()[0] ?? null,
-        audioElement: audioRef.current,
-        transcriptManager: tm,
-        onConversationStateChange: (cState) =>
-          setConversationStateState(cState),
-        onMicStatusChange: (mStatus) => setMicStatusState(mStatus),
-        onMuteChange: (m) => setIsMutedState(m),
-        onTextFallbackChange: (tf) => setTextFallbackState(tf),
-      });
-      controlsManagerRef.current = controls;
-
-      dc.onopen = () => {
-        if (reconnectTimerRef.current) {
-          clearTimeout(reconnectTimerRef.current);
-          reconnectTimerRef.current = null;
-        }
-        setConnectionStateState("connected");
-      };
-
-      dc.onmessage = (event: MessageEvent) => {
-        if (typeof event.data === "string") {
-          try {
-            const parsed = JSON.parse(event.data);
-            // Handle automatic barge-in on Server VAD speech_started (ADR-07)
-            if (parsed.type === "input_audio_buffer.speech_started") {
-              controls.handleBargeIn(parsed);
-            }
-            tm.handleEvent(parsed);
-          } catch {
-            tm.handleEvent(event.data);
-          }
-        }
-      };
-
-      // 7. Monitor ICE / PeerConnection state changes (ADR-10, 10s grace period)
-      const handleStateChange = () => {
-        const state = pc.connectionState;
-        const ice = pc.iceConnectionState;
-
-        if (state === "connected" || ice === "connected") {
-          if (reconnectTimerRef.current) {
-            clearTimeout(reconnectTimerRef.current);
-            reconnectTimerRef.current = null;
-          }
-          setConnectionStateState("connected");
-        } else if (state === "disconnected" || ice === "disconnected") {
-          setConnectionStateState("reconnecting");
-          if (!reconnectTimerRef.current) {
-            reconnectTimerRef.current = setTimeout(() => {
-              cleanupSession({
-                peerConnection: pc,
-                dataChannel: dc,
-                localStream: localStreamRef.current,
-                audioElement: audioRef.current,
-              });
-              setConnectionStateState("error");
-            }, 10_000);
-          }
-        } else if (state === "failed" || ice === "failed") {
-          if (reconnectTimerRef.current) {
-            clearTimeout(reconnectTimerRef.current);
-            reconnectTimerRef.current = null;
-          }
-          cleanupSession({
-            peerConnection: pc,
-            dataChannel: dc,
-            localStream: localStreamRef.current,
-            audioElement: audioRef.current,
+        const playPromise = audioRef.current.play?.();
+        if (
+          playPromise !== undefined &&
+          typeof playPromise.catch === "function"
+        ) {
+          playPromise.catch((err: unknown) => {
+            console.error("Audio playback unlock error:", err);
           });
-          setConnectionStateState("error");
         }
-      };
-
-      pc.onconnectionstatechange = handleStateChange;
-      pc.oniceconnectionstatechange = handleStateChange;
-
-      // 8. Create SDP Offer & negotiate with OpenAI Realtime endpoint
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const sdpUrl = "https://api.openai.com/v1/realtime/calls";
-      const sdpRes = await fetch(sdpUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${ephemeralKey}`,
-          "Content-Type": "application/sdp",
-        },
-        body: offer.sdp,
-      });
-
-      if (!sdpRes.ok) {
-        throw new Error(
-          `OpenAI Realtime SDP negotiation failed (${sdpRes.status}).`
-        );
+      } catch (err: unknown) {
+        console.error("Synchronous audio play unlock error:", err);
       }
+    }
 
-      const answerSdp = await sdpRes.text();
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
-    } catch (err) {
-      cleanupSession({
-        peerConnection: peerConnectionRef.current,
-        dataChannel: dataChannelRef.current,
-        localStream: localStreamRef.current,
-        audioElement: audioRef.current,
-      });
-      setErrorState(
-        err instanceof Error ? err.message : "Failed to establish WebRTC call."
-      );
-      setConnectionStateState("error");
+    // 1. Initialize TranscriptManager (Slice 3B)
+    const tm = new TranscriptManager({
+      initialItems: transcript,
+      onTranscriptChange: (items) => setTranscriptState([...items]),
+      onConversationStateChange: (cState) => {
+        setConversationStateState(cState);
+        if (controlsManagerRef.current) {
+          controlsManagerRef.current.conversationState = cState;
+        }
+      },
+    });
+    transcriptManagerRef.current = tm;
+
+    // 2. Initialize RealtimeControlsManager (Slice 3C)
+    const controls = new RealtimeControlsManager({
+      audioElement: audioRef.current,
+      transcriptManager: tm,
+      onConversationStateChange: (cState) => setConversationStateState(cState),
+      onMicStatusChange: (mStatus) => setMicStatusState(mStatus),
+      onMuteChange: (m) => setIsMutedState(m),
+      onTextFallbackChange: (tf) => setTextFallbackState(tf),
+    });
+    controlsManagerRef.current = controls;
+
+    // 3. Initialize RealtimeConnectionManager (Slice 3A)
+    const connectionManager = new RealtimeConnectionManager({
+      audioElement: audioRef.current,
+      allowTextFallback: true,
+      fetchToken: async () => {
+        const tokenRes = await fetch("/api/realtime/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: source.text,
+            title: source.title,
+            sourceType: source.sourceType,
+          }),
+        });
+        const tokenData = await tokenRes.json();
+        if (!tokenData.ok) {
+          throw new Error(
+            tokenData.message || "Failed to mint Realtime session token."
+          );
+        }
+        return {
+          ephemeralKey: tokenData.ephemeralKey,
+          model: tokenData.model,
+        };
+      },
+      onStateChange: (nextState) => {
+        setConnectionStateState(nextState);
+      },
+      onConversationStateChange: (cState) => {
+        setConversationStateState(cState);
+      },
+      onMicFallback: (reason) => {
+        controls.enableTextFallback(reason);
+      },
+      onTransportCreated: ({ peerConnection, dataChannel, localStream }) => {
+        controls.peerConnection = peerConnection ?? null;
+        controls.dataChannel = dataChannel ?? null;
+        controls.localAudioTrack =
+          localStream?.getAudioTracks?.()[0] ??
+          localStream?.getTracks?.()[0] ??
+          null;
+      },
+      onEvent: (parsed) => {
+        if (typeof parsed === "object" && parsed !== null) {
+          const evtType = (parsed as { type?: string }).type;
+          // Automatic barge-in on Server VAD speech_started (ADR-07 / AC-07.1)
+          if (evtType === "input_audio_buffer.speech_started") {
+            controls.handleBargeIn(parsed);
+          } else if (
+            evtType === "response.created" ||
+            evtType === "output_audio_buffer.started" ||
+            evtType === "response.output_item.added" ||
+            evtType === "response.audio_transcript.delta" ||
+            evtType === "response.output_audio_transcript.delta" ||
+            evtType === "response.audio.delta" ||
+            evtType === "response.output_audio.delta"
+          ) {
+            controls.ensureAudioPlayback();
+          }
+        }
+        tm.handleEvent(parsed);
+      },
+      onError: (err) => {
+        setErrorState(
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : "Failed to establish WebRTC call."
+        );
+      },
+    });
+    connectionManagerRef.current = connectionManager;
+
+    try {
+      await connectionManager.connect();
+    } catch {
+      // Error state and resource teardown are handled inside RealtimeConnectionManager.connect()
     }
   };
 
   // Stop / End Call Handler (ADR-06 / AC-06.2)
   const handleStopVoiceChat = () => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    cleanupSession({
-      peerConnection: peerConnectionRef.current,
-      dataChannel: dataChannelRef.current,
-      localStream: localStreamRef.current,
-      audioElement: audioRef.current,
-    });
-    peerConnectionRef.current = null;
-    dataChannelRef.current = null;
-    localStreamRef.current = null;
-    controlsManagerRef.current = null;
-
-    setConnectionStateState("ready");
+    teardownActiveSession();
+    setConnectionStateState(source ? "ready" : "idle");
     setConversationStateState("listening");
+    setIsMutedState(false);
   };
 
   // Manual Speech Interruption (ADR-07 / AC-07.2)
@@ -528,16 +416,24 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Top Application Header (ADR-11, AC-11.4 / apple-web-app safe-area) */}
+      {/* Top Application Header (ADR-11, AC-11.4 / apple-web-app sticky safe-area header) */}
       <header
-        className="p-4 bg-white border-b border-gray-200"
+        className="sticky top-0 z-20 p-4 bg-white border-b border-gray-200 shadow-sm"
         style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          minHeight:
+            "calc(3.5rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
           paddingTop:
-            "calc(1rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
+            "calc(0.875rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
           backgroundColor: "#ffffff",
         }}
       >
-        <h1 className="text-lg font-bold" style={{ fontSize: "18px", margin: 0 }}>
+        <h1
+          className="text-lg font-bold text-slate-900"
+          style={{ fontSize: "18px", margin: 0, letterSpacing: "-0.015em" }}
+        >
           Talk to a Document or YouTube Video
         </h1>
         <p

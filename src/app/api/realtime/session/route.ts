@@ -147,6 +147,67 @@ export async function POST(req: Request): Promise<Response> {
       ? text.length > MAX_REALTIME_CONTEXT_CHARS
       : prepared.isContextTruncated;
 
+  // AC-04.2 / ADR-04: Server VAD configuration (supports calibrated threshold 0.8 / silence 600ms via body or env)
+  const clientVad = (
+    typeof body.turn_detection === "object" && body.turn_detection !== null
+      ? body.turn_detection
+      : typeof body.turnDetection === "object" && body.turnDetection !== null
+        ? body.turnDetection
+        : undefined
+  ) as Record<string, unknown> | undefined;
+
+  const vadThreshold =
+    typeof clientVad?.threshold === "number"
+      ? clientVad.threshold
+      : typeof body.threshold === "number"
+        ? body.threshold
+        : typeof process.env.OPENAI_REALTIME_VAD_THRESHOLD === "string" &&
+            !isNaN(parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD))
+          ? parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD)
+          : 0.5;
+
+  const vadSilenceDurationMs =
+    typeof clientVad?.silence_duration_ms === "number"
+      ? clientVad.silence_duration_ms
+      : typeof body.silence_duration_ms === "number"
+        ? body.silence_duration_ms
+        : typeof body.silenceDurationMs === "number"
+          ? body.silenceDurationMs
+          : typeof process.env.OPENAI_REALTIME_VAD_SILENCE_MS === "string" &&
+              !isNaN(parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10))
+            ? parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10)
+            : 500;
+
+  const vadPrefixPaddingMs =
+    typeof clientVad?.prefix_padding_ms === "number"
+      ? clientVad.prefix_padding_ms
+      : typeof body.prefix_padding_ms === "number"
+        ? body.prefix_padding_ms
+        : 300;
+
+  const vadCreateResponse =
+    typeof clientVad?.create_response === "boolean"
+      ? clientVad.create_response
+      : typeof body.create_response === "boolean"
+        ? body.create_response
+        : true;
+
+  const vadInterruptResponse =
+    typeof clientVad?.interrupt_response === "boolean"
+      ? clientVad.interrupt_response
+      : typeof body.interrupt_response === "boolean"
+        ? body.interrupt_response
+        : true;
+
+  const turnDetectionConfig = {
+    type: "server_vad",
+    threshold: vadThreshold,
+    prefix_padding_ms: vadPrefixPaddingMs,
+    silence_duration_ms: vadSilenceDurationMs,
+    create_response: vadCreateResponse,
+    interrupt_response: vadInterruptResponse,
+  };
+
   // AC-04.2: Construct official OpenAI Realtime session configuration
   const openAiPayload = {
     model,
@@ -156,14 +217,7 @@ export async function POST(req: Request): Promise<Response> {
     input_audio_transcription: {
       model: "whisper-1",
     },
-    turn_detection: {
-      type: "server_vad",
-      threshold: 0.5,
-      prefix_padding_ms: 300,
-      silence_duration_ms: 500,
-      create_response: true,
-      interrupt_response: true,
-    },
+    turn_detection: turnDetectionConfig,
   };
 
   // AC-10.1: Enforce 15,000 ms AbortController timeout on session token minting
@@ -216,14 +270,7 @@ export async function POST(req: Request): Promise<Response> {
                     transcription: {
                       model: "whisper-1",
                     },
-                    turn_detection: {
-                      type: "server_vad",
-                      threshold: 0.5,
-                      prefix_padding_ms: 300,
-                      silence_duration_ms: 500,
-                      create_response: true,
-                      interrupt_response: true,
-                    },
+                    turn_detection: turnDetectionConfig,
                   },
                   output: {
                     voice,

@@ -75,7 +75,7 @@ describe("Slice 3C: Speech Interruption & Text Fallback Mode (AC-07, AC-09)", ()
   });
 
   describe("AC-07.1: Automatic Voice Barge-In via Server VAD", () => {
-    it("AC-07.1: transitions state to user_speaking, halts audio playback, and marks assistant turn as interrupted when speech_started arrives while assistant is speaking", () => {
+    it("AC-07.1 / AC-07.3 / AC-07.4: transitions state to user_speaking, silences audio without pausing, finalizes assistant turn, and avoids redundant cancel", () => {
       mockDataChannel.simulateOpen();
 
       // Setup in-progress assistant turn
@@ -105,22 +105,24 @@ describe("Slice 3C: Speech Interruption & Text Fallback Mode (AC-07, AC-09)", ()
       // 1. Immediately transitions conversation sub-state to user_speaking
       expect(conversationState).toBe("user_speaking");
 
-      // 2. Immediately halts active remote audio playback
-      expect(mockAudioElement.pause).toHaveBeenCalled();
+      // 2. AC-07.3: Never pause the live WebRTC audio stream (preserves decoder & user activation)
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.paused).toBe(false);
 
-      // 3. Finalizes the in-progress assistant turn, marking it as interrupted while preserving already spoken text
+      // 3. AC-07.3: Applies client-side audio silencing without DOM pausing
+      expect(mockAudioElement.muted).toBe(true);
+
+      // 4. Finalizes the in-progress assistant turn, marking it as interrupted while preserving already spoken text
       const items = transcriptManager.getItems();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe("asst_item_1");
       expect(items[0].text).toBe("The early results indicate that our hypothesis...");
       expect(["interrupted", "completed"]).toContain(items[0].status);
 
-      // 4. Sends cancel and clear buffer events over data channel to stop outbound server audio
-      expect(mockDataChannel.send).toHaveBeenCalledWith(
+      // 5. AC-07.4: On spoken barge-in under Server VAD (interrupt_response: true),
+      // client MUST NOT dispatch redundant response.cancel, preventing response_cancel_not_active errors
+      expect(mockDataChannel.send).not.toHaveBeenCalledWith(
         JSON.stringify(MOCK_RESPONSE_CANCEL_EVENT)
-      );
-      expect(mockDataChannel.send).toHaveBeenCalledWith(
-        JSON.stringify(MOCK_OUTPUT_AUDIO_BUFFER_CLEAR_EVENT)
       );
     });
 
@@ -139,11 +141,12 @@ describe("Slice 3C: Speech Interruption & Text Fallback Mode (AC-07, AC-09)", ()
         JSON.stringify(MOCK_RESPONSE_CANCEL_EVENT)
       );
       expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.muted).toBe(false);
     });
   });
 
   describe("AC-07.2: Manual Interrupt Button Control", () => {
-    it("AC-07.2: sends response.cancel and output_audio_buffer.clear over data channel, pauses audio, and finalizes assistant turn", () => {
+    it("AC-07.2 / AC-07.3: sends response.cancel and output_audio_buffer.clear over data channel, silences audio without pausing, and finalizes assistant turn", () => {
       mockDataChannel.simulateOpen();
 
       // Setup assistant turn in transcript
@@ -171,8 +174,10 @@ describe("Slice 3C: Speech Interruption & Text Fallback Mode (AC-07, AC-09)", ()
         JSON.stringify(MOCK_OUTPUT_AUDIO_BUFFER_CLEAR_EVENT)
       );
 
-      // 2. Immediately halts audio element playback
-      expect(mockAudioElement.pause).toHaveBeenCalled();
+      // 2. AC-07.3: Never pauses the live WebRTC audio stream, silences via client muting
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.muted).toBe(true);
 
       // 3. Finalizes assistant transcript turn while preserving spoken text
       const items = transcriptManager.getItems();
@@ -361,8 +366,162 @@ describe("Slice 3C: Speech Interruption & Text Fallback Mode (AC-07, AC-09)", ()
     });
   });
 
+  describe("AC-07.3 & AC-07.5: Continuous Stream Persistence & Multi-Turn Audio Resumption (ADR-06, ADR-07)", () => {
+    it("AC-07.3: strictly forbids calling audioElement.pause() during active session interruptions to preserve WebRTC decoder pipeline", () => {
+      mockDataChannel.simulateOpen();
+
+      // Turn 1 Assistant speaking
+      conversationState = "assistant_speaking";
+      transcriptManager.handleEvent({
+        type: "response.output_item.added",
+        item: { id: "asst_item_1", role: "assistant" },
+      });
+
+      // 1. Manual interrupt
+      controlsManager.interrupt();
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.muted).toBe(true);
+
+      // Unmute for new turn
+      controlsManager.ensureAudioPlayback();
+      expect(mockAudioElement.muted).toBe(false);
+      expect(mockAudioElement.paused).toBe(false);
+
+      // 2. Spoken barge-in
+      conversationState = "assistant_speaking";
+      transcriptManager.handleEvent({
+        type: "response.output_item.added",
+        item: { id: "asst_item_2", role: "assistant" },
+      });
+      controlsManager.handleBargeIn({
+        type: "input_audio_buffer.speech_started",
+        item_id: "item_barge",
+      });
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.muted).toBe(true);
+    });
+
+    it("AC-07.5: automatically restores audio output (unmuted) on subsequent assistant turn following spoken barge-in", () => {
+      mockDataChannel.simulateOpen();
+
+      // Turn 1: Assistant speaks and is barged into
+      conversationState = "assistant_speaking";
+      transcriptManager.handleEvent({
+        type: "response.output_item.added",
+        item: { id: "asst_item_1", role: "assistant" },
+      });
+
+      controlsManager.handleBargeIn({
+        type: "input_audio_buffer.speech_started",
+        item_id: "item_barge_1",
+      });
+      expect(mockAudioElement.muted).toBe(true);
+      expect(mockAudioElement.paused).toBe(false);
+
+      // Turn 1 cancelled on server
+      transcriptManager.handleEvent({
+        type: "output_audio_buffer.cleared",
+      });
+      transcriptManager.handleEvent({
+        type: "response.done",
+        response: { status: "cancelled" },
+      });
+
+      // User finishes speech (speech_stopped) and server creates Turn 2
+      transcriptManager.handleEvent({
+        type: "input_audio_buffer.speech_stopped",
+      });
+      transcriptManager.handleEvent({
+        type: "response.created",
+        response: { id: "resp_2" },
+      });
+
+      // When audio begins streaming for Turn 2, ensureAudioPlayback() is invoked
+      controlsManager.ensureAudioPlayback();
+
+      // Audio MUST be unmuted and actively playing without user activation re-prompt
+      expect(mockAudioElement.muted).toBe(false);
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+    });
+
+    it("AC-07.5: automatically restores audio output on subsequent text turn following manual interrupt", () => {
+      mockDataChannel.simulateOpen();
+
+      // Turn 1: Assistant speaking, user clicks Interrupt
+      conversationState = "assistant_speaking";
+      transcriptManager.handleEvent({
+        type: "response.output_item.added",
+        item: { id: "asst_item_1", role: "assistant" },
+      });
+
+      controlsManager.interrupt();
+      expect(mockAudioElement.muted).toBe(true);
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+
+      // Turn 2: User sends text message
+      controlsManager.sendTextMessage("What about the second section?");
+
+      // Server starts output audio for Turn 2
+      transcriptManager.handleEvent({
+        type: "response.created",
+        response: { id: "resp_text_2" },
+      });
+      controlsManager.ensureAudioPlayback();
+
+      // Audio MUST be unmuted and actively playing
+      expect(mockAudioElement.muted).toBe(false);
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+    });
+
+    it("AC-07.5: maintains continuous playback across multiple consecutive conversational turns", () => {
+      mockDataChannel.simulateOpen();
+
+      for (let turn = 1; turn <= 3; turn++) {
+        // Assistant turn starts
+        conversationState = "assistant_speaking";
+        transcriptManager.handleEvent({
+          type: "response.output_item.added",
+          item: { id: `asst_item_${turn}`, role: "assistant" },
+        });
+        controlsManager.ensureAudioPlayback();
+        expect(mockAudioElement.muted).toBe(false);
+        expect(mockAudioElement.paused).toBe(false);
+
+        if (turn === 1) {
+          // Turn 1 interrupted via manual button
+          controlsManager.interrupt();
+          expect(mockAudioElement.muted).toBe(true);
+          expect(mockAudioElement.paused).toBe(false);
+        } else if (turn === 2) {
+          // Turn 2 interrupted via spoken barge-in
+          controlsManager.handleBargeIn({
+            type: "input_audio_buffer.speech_started",
+            item_id: `user_barge_${turn}`,
+          });
+          expect(mockAudioElement.muted).toBe(true);
+          expect(mockAudioElement.paused).toBe(false);
+        } else {
+          // Turn 3 finishes naturally
+          transcriptManager.handleEvent({
+            type: "response.done",
+            response: { status: "completed" },
+          });
+        }
+      }
+
+      // Across all 3 turns, audioElement.pause() was NEVER called on the live stream
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.paused).toBe(false);
+    });
+  });
+
   describe("Standalone Helper Functions", () => {
-    it("interruptAssistant helper executes interrupt sequence", () => {
+    it("interruptAssistant helper executes interrupt sequence without pausing audio element", () => {
       mockDataChannel.simulateOpen();
       const onStateChange = vi.fn();
 
@@ -377,7 +536,9 @@ describe("Slice 3C: Speech Interruption & Text Fallback Mode (AC-07, AC-09)", ()
       expect(mockDataChannel.send).toHaveBeenCalledWith(
         JSON.stringify(MOCK_RESPONSE_CANCEL_EVENT)
       );
-      expect(mockAudioElement.pause).toHaveBeenCalled();
+      expect(mockAudioElement.pause).not.toHaveBeenCalled();
+      expect(mockAudioElement.paused).toBe(false);
+      expect(mockAudioElement.muted).toBe(true);
       expect(onStateChange).toHaveBeenCalledWith("listening");
     });
 

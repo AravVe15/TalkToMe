@@ -18,7 +18,9 @@
   --assistant-bubble: #f1f5f9;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
@@ -29,11 +31,88 @@ body {
   padding: 0;
   background-color: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-    Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+/* Modern Form & Control Reset */
+button {
+  font-family: inherit;
+  border: 1px solid transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: background-color 0.15s ease, opacity 0.15s ease,
+    transform 0.1s ease, box-shadow 0.15s ease;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.985);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input {
+  font-family: inherit;
+  color: var(--foreground);
+  background-color: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+input:disabled {
+  background-color: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Custom File Input Button Styling */
+input[type="file"] {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  color: #475569;
+  background-color: #f8fafc;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: 0.375rem;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
 }
 
 /* Touch Ergonomics & Double-Tap Zoom Suppression (ADR-11 / AC-11.2) */
@@ -62,9 +141,51 @@ main,
   isolation: isolate;
 }
 
-/* Mobile-First Layout Utilities */
+/* ==========================================================================
+   Complete Mobile-First Utility Classes
+   ========================================================================== */
+
+/* Layout & Positioning */
 .max-w-md {
   max-width: 28rem;
+}
+
+.max-w-\[85\%\] {
+  max-width: 85%;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.w-2\.5 {
+  width: 0.625rem;
+}
+
+.h-2\.5 {
+  height: 0.625rem;
+}
+
+.h-11 {
+  height: 44px;
+}
+
+.min-w-0 {
+  min-width: 0;
+}
+
+.min-h-dvh {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* 44x44px touch targets */
+.min-h-\[44px\] {
+  min-height: 44px;
+}
+
+.min-w-\[44px\] {
+  min-width: 44px;
 }
 
 .mx-auto {
@@ -72,22 +193,56 @@ main,
   margin-right: auto;
 }
 
-.min-h-dvh {
-  min-height: 100dvh;
+.ml-auto {
+  margin-left: auto;
+}
+
+.mr-auto {
+  margin-right: auto;
+}
+
+.m-4 {
+  margin: 1rem;
 }
 
 .overflow-x-hidden {
   overflow-x: hidden;
 }
 
+.overflow-y-auto {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .sticky {
   position: sticky;
+}
+
+.top-0 {
+  top: 0;
 }
 
 .bottom-0 {
   bottom: 0;
 }
 
+.left-0 {
+  left: 0;
+}
+
+.right-0 {
+  right: 0;
+}
+
+.z-10 {
+  z-index: 10;
+}
+
+.z-20 {
+  z-index: 20;
+}
+
+/* Display & Flexbox */
 .flex {
   display: flex;
 }
@@ -98,6 +253,14 @@ main,
 
 .flex-1 {
   flex: 1 1 0%;
+}
+
+.inline-block {
+  display: inline-block;
+}
+
+.hidden {
+  display: none;
 }
 
 .items-center {
@@ -112,6 +275,19 @@ main,
   justify-content: center;
 }
 
+.self-end {
+  align-self: flex-end;
+}
+
+.self-start {
+  align-self: flex-start;
+}
+
+/* Spacing & Gaps */
+.gap-1 {
+  gap: 0.25rem;
+}
+
 .gap-2 {
   gap: 0.5rem;
 }
@@ -124,6 +300,14 @@ main,
   gap: 1rem;
 }
 
+.p-2 {
+  padding: 0.5rem;
+}
+
+.p-2\.5 {
+  padding: 0.625rem;
+}
+
 .p-3 {
   padding: 0.75rem;
 }
@@ -132,9 +316,28 @@ main,
   padding: 1rem;
 }
 
+.p-6 {
+  padding: 1.5rem;
+}
+
+.px-2\.5 {
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+}
+
+.px-3 {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+
 .px-4 {
   padding-left: 1rem;
   padding-right: 1rem;
+}
+
+.py-1 {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
 }
 
 .py-2 {
@@ -147,20 +350,15 @@ main,
   padding-bottom: 0.75rem;
 }
 
-/* 44x44px touch targets */
-.min-h-\[44px\] {
-  min-height: 44px;
+.pt-1 {
+  padding-top: 0.25rem;
 }
 
-.min-w-\[44px\] {
-  min-width: 44px;
+.pt-2 {
+  padding-top: 0.5rem;
 }
 
-.h-11 {
-  height: 44px;
-}
-
-/* 16px input font size to prevent iOS Safari auto-zoom */
+/* Typography (16px input font size to prevent iOS Safari auto-zoom) */
 .text-base {
   font-size: 16px;
   line-height: 1.5;
@@ -181,6 +379,10 @@ main,
   line-height: 1.75rem;
 }
 
+.font-medium {
+  font-weight: 500;
+}
+
 .font-semibold {
   font-weight: 600;
 }
@@ -189,16 +391,69 @@ main,
   font-weight: 700;
 }
 
-.rounded-lg {
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+.italic {
+  font-style: italic;
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.capitalize {
+  text-transform: capitalize;
+}
+
+.tracking-wider {
+  letter-spacing: 0.05em;
+}
+
+.leading-relaxed {
+  line-height: 1.625;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whitespace-pre-wrap {
+  white-space: pre-wrap;
+}
+
+.break-words {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Borders & Radius */
+.rounded-md {
   border-radius: 0.5rem;
 }
 
-.rounded-md {
-  border-radius: 0.375rem;
+.rounded-lg {
+  border-radius: 0.75rem;
 }
 
 .rounded-full {
   border-radius: 9999px;
+}
+
+.rounded-br-none {
+  border-bottom-right-radius: 0.125rem;
+}
+
+.rounded-bl-none {
+  border-bottom-left-radius: 0.125rem;
 }
 
 .border {
@@ -211,12 +466,34 @@ main,
   border-top-style: solid;
 }
 
+.border-b {
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+}
+
 .border-gray-200 {
   border-color: #e2e8f0;
 }
 
+.border-red-200 {
+  border-color: #fecaca;
+}
+
+.border-amber-200 {
+  border-color: #fde68a;
+}
+
+.border-amber-300 {
+  border-color: #fcd34d;
+}
+
+/* Backgrounds & Text Colors */
 .bg-white {
   background-color: #ffffff;
+}
+
+.bg-white\/95 {
+  background-color: rgba(255, 255, 255, 0.95);
 }
 
 .bg-slate-50 {
@@ -231,10 +508,100 @@ main,
   background-color: #2563eb;
 }
 
+.bg-amber-50 {
+  background-color: #fffbeb;
+}
+
+.bg-amber-600 {
+  background-color: #d97706;
+}
+
+.bg-red-50 {
+  background-color: #fef2f2;
+}
+
+.bg-red-600 {
+  background-color: #dc2626;
+}
+
+.bg-gray-400 {
+  background-color: #94a3b8;
+}
+
 .text-white {
   color: #ffffff;
 }
 
-.hidden {
-  display: none;
+.text-slate-800 {
+  color: #1e293b;
+}
+
+.text-slate-900 {
+  color: #0f172a;
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-amber-900 {
+  color: #78350f;
+}
+
+.text-red-800 {
+  color: #991b1b;
+}
+
+/* Shadows, Glassmorphism & Interactive States */
+.shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+}
+
+.shadow-md {
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1),
+    0 2px 4px -2px rgba(15, 23, 42, 0.08);
+}
+
+.shadow-lg {
+  box-shadow: 0 -4px 12px -2px rgba(15, 23, 42, 0.08),
+    0 4px 6px -4px rgba(15, 23, 42, 0.06);
+}
+
+.backdrop-blur {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.opacity-60 {
+  opacity: 0.6;
+}
+
+.opacity-70 {
+  opacity: 0.7;
+}
+
+.opacity-80 {
+  opacity: 0.8;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

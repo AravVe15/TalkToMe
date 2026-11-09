@@ -96,15 +96,25 @@ describe("WebRTC Test Harness & Fixtures Verification", () => {
     expect(pc.connectionState).toBe("closed");
   });
 
-  it("MockHTMLAudioElement handles playback and srcObject assignment", () => {
+  it("MockHTMLAudioElement handles playback, muting, and srcObject assignment", () => {
     const audio = new MockHTMLAudioElement();
     const stream = new MockMediaStream();
     audio.srcObject = stream;
     expect(audio.srcObject).toBe(stream);
-    audio.play();
+    expect(audio.paused).toBe(false);
+    expect(audio.muted).toBe(false);
+
+    audio.muted = true;
+    expect(audio.muted).toBe(true);
+    expect(audio.paused).toBe(false);
+
     audio.pause();
-    expect(audio.play).toHaveBeenCalled();
     expect(audio.pause).toHaveBeenCalled();
+    expect(audio.paused).toBe(true);
+
+    audio.play();
+    expect(audio.play).toHaveBeenCalled();
+    expect(audio.paused).toBe(false);
   });
 
   it("setupMockWebRTCGlobals installs and restores global objects cleanly", () => {

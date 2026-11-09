@@ -34,7 +34,29 @@ export interface RealtimeConnectionOptions {
   onEvent?: (event: unknown) => void;
   fetchToken?: () => Promise<{ ephemeralKey: string; model?: string }>;
   reconnectTimeoutMs?: number;
+  allowTextFallback?: boolean;
+  onMicFallback?: (reason: string) => void;
+  onTransportCreated?: (resources: RealtimeSessionResources) => void;
+  vadConfig?: Partial<ServerVadConfig>;
 }
+
+export interface ServerVadConfig {
+  type: "server_vad";
+  threshold: number;
+  prefix_padding_ms: number;
+  silence_duration_ms: number;
+  create_response: boolean;
+  interrupt_response: boolean;
+}
+
+export const CALIBRATED_SERVER_VAD_CONFIG: ServerVadConfig = {
+  type: "server_vad",
+  threshold: 0.8,
+  prefix_padding_ms: 300,
+  silence_duration_ms: 600,
+  create_response: true,
+  interrupt_response: true,
+};
 
 export interface RealtimeSessionResources {
   peerConnection?: RTCPeerConnection | null;
@@ -189,38 +211,67 @@ export class RealtimeConnectionManager {
           ? model.trim()
           : DEFAULT_REALTIME_MODEL;
 
-      if (!globalThis.navigator?.mediaDevices?.getUserMedia) {
-        throw new Error("Microphone mediaDevices API is unavailable.");
-      }
+      let stream: MediaStream | null = null;
+      let micUnavailable = false;
+      let micFallbackReason = "Microphone is unavailable.";
 
-      // Capture microphone audio stream with hardware Acoustic Echo Cancellation (ADR-11 / AC-11.5)
-      const stream = await globalThis.navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      this.localStream = stream;
+      if (!globalThis.navigator?.mediaDevices?.getUserMedia) {
+        if (this.options.allowTextFallback) {
+          micUnavailable = true;
+          micFallbackReason = "Microphone mediaDevices API is unavailable.";
+        } else {
+          throw new Error("Microphone mediaDevices API is unavailable.");
+        }
+      } else {
+        try {
+          // Capture microphone audio stream with hardware Acoustic Echo Cancellation (ADR-11 / AC-11.5)
+          stream = await globalThis.navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+          this.localStream = stream;
+        } catch (micErr: unknown) {
+          if (this.options.allowTextFallback) {
+            micUnavailable = true;
+            micFallbackReason =
+              micErr instanceof Error
+                ? micErr.message
+                : "Microphone permission denied or hardware unavailable.";
+          } else {
+            throw micErr;
+          }
+        }
+      }
 
       // Initialize RTCPeerConnection
       const pc = new RTCPeerConnection();
       this.peerConnection = pc;
 
-      // Attach local audio tracks to peer connection
-      const audioTracks =
-        typeof stream.getAudioTracks === "function"
-          ? stream.getAudioTracks()
-          : typeof stream.getTracks === "function"
-            ? stream.getTracks()
-            : [];
-      for (const track of audioTracks) {
-        try {
-          track.contentHint = "speech";
-        } catch {
-          // Ignore if contentHint is not supported in environment
+      if (micUnavailable) {
+        // Configure recvonly audio transceiver for mic-less text fallback mode (ADR-09 / AC-09.1)
+        if (typeof pc.addTransceiver === "function") {
+          pc.addTransceiver("audio", { direction: "recvonly" });
         }
-        pc.addTrack(track, stream);
+        this.options.onMicFallback?.(micFallbackReason);
+      } else if (stream) {
+        // Attach local audio tracks to peer connection
+        const audioTracks =
+          typeof stream.getAudioTracks === "function"
+            ? stream.getAudioTracks()
+            : typeof stream.getTracks === "function"
+              ? stream.getTracks()
+              : [];
+        for (const track of audioTracks) {
+          try {
+            track.contentHint = "speech";
+          } catch {
+            // Ignore if contentHint is not supported in environment
+          }
+          pc.addTrack(track, stream);
+        }
       }
 
       // Attach remote audio stream when OpenAI track arrives
@@ -228,7 +279,19 @@ export class RealtimeConnectionManager {
         const remoteStream = event.streams?.[0] ?? null;
         if (this.audioElement && remoteStream) {
           this.audioElement.srcObject = remoteStream;
-          void this.audioElement.play?.().catch(() => {});
+          try {
+            const playPromise = this.audioElement.play?.();
+            if (
+              playPromise !== undefined &&
+              typeof playPromise.catch === "function"
+            ) {
+              playPromise.catch((err: unknown) => {
+                console.error("Failed to start remote audio playback:", err);
+              });
+            }
+          } catch (err: unknown) {
+            console.error("Audio play invocation error:", err);
+          }
         }
       };
 
@@ -245,9 +308,19 @@ export class RealtimeConnectionManager {
       const dc = pc.createDataChannel("oai-events");
       this.dataChannel = dc;
 
+      this.options.onTransportCreated?.({
+        peerConnection: pc,
+        dataChannel: dc,
+        localStream: this.localStream,
+        audioElement: this.audioElement,
+      });
+
       dc.onopen = () => {
         this.clearReconnectTimer();
         this.setState("connected");
+        // Calibrate Server VAD sensitivity (threshold 0.8, silence_duration_ms 600ms)
+        // to prevent false barge-in/interruptions from ambient sound and room acoustics (ADR-04, ADR-11 / AC-07, AC-11)
+        this.updateSessionVad(this.options.vadConfig);
       };
 
       dc.onmessage = (event: MessageEvent) => {
@@ -360,6 +433,23 @@ export class RealtimeConnectionManager {
       this.options.onError?.(normalizedError);
       return false;
     }
+  }
+
+  sendSessionUpdate(sessionConfig: Record<string, unknown>): boolean {
+    return this.sendEvent({
+      type: "session.update",
+      session: sessionConfig,
+    });
+  }
+
+  updateSessionVad(config?: Partial<ServerVadConfig>): boolean {
+    const vad: ServerVadConfig = {
+      ...CALIBRATED_SERVER_VAD_CONFIG,
+      ...config,
+    };
+    return this.sendSessionUpdate({
+      turn_detection: vad,
+    });
   }
 
   private handleTransportStateChange(

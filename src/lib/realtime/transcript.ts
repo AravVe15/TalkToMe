@@ -453,6 +453,7 @@ export function reduceTranscriptEvent(
 export class TranscriptManager {
   items: TranscriptItem[];
   conversationState: RealtimeConversationState = "listening";
+  isAudioOutputActive: boolean = false;
 
   private readonly options: TranscriptManagerOptions;
 
@@ -472,7 +473,7 @@ export class TranscriptManager {
     const eventType = parsed.type;
 
     // Update conversation flow sub-state (AC-06.3 / ADR-08)
-    this.updateConversationStateForEvent(eventType);
+    this.updateConversationStateForEvent(eventType, parsed);
 
     // Apply transcript item state reduction
     const previousItems = this.items;
@@ -489,6 +490,7 @@ export class TranscriptManager {
   }
 
   markAssistantInterrupted(): void {
+    this.isAudioOutputActive = false;
     let modified = false;
     const now = Date.now();
     this.items = this.items.map((item) => {
@@ -502,6 +504,27 @@ export class TranscriptManager {
       }
       return item;
     });
+
+    // If server token generation already emitted response.done while buffered WebRTC
+    // audio was still playing, mark the most recent completed assistant turn as interrupted.
+    if (!modified) {
+      for (let i = this.items.length - 1; i >= 0; i--) {
+        const candidate = this.items[i];
+        if (candidate.role === "assistant") {
+          if (candidate.status === "completed") {
+            const nextItems = [...this.items];
+            nextItems[i] = {
+              ...candidate,
+              status: "interrupted",
+              updatedAt: now,
+            };
+            this.items = nextItems;
+            modified = true;
+          }
+          break;
+        }
+      }
+    }
 
     if (modified) {
       this.options.onTranscriptChange?.(this.getItems());
@@ -526,18 +549,28 @@ export class TranscriptManager {
 
   clear(): void {
     this.items = [];
+    this.isAudioOutputActive = false;
     this.setConversationState("listening");
     this.options.onTranscriptChange?.([]);
   }
 
-  private updateConversationStateForEvent(eventType: string): void {
+  private updateConversationStateForEvent(
+    eventType: string,
+    parsed?: Record<string, unknown>
+  ): void {
     switch (eventType) {
       case "input_audio_buffer.speech_started":
+        this.isAudioOutputActive = false;
         this.setConversationState("user_speaking");
         break;
 
       case "response.created":
         this.setConversationState("assistant_thinking");
+        break;
+
+      case "output_audio_buffer.started":
+        this.isAudioOutputActive = true;
+        this.setConversationState("assistant_speaking");
         break;
 
       case "response.audio_transcript.delta":
@@ -546,13 +579,48 @@ export class TranscriptManager {
       case "response.output_text.delta":
       case "response.audio.delta":
       case "response.output_audio.delta":
-        this.setConversationState("assistant_speaking");
+        if (this.conversationState !== "user_speaking") {
+          this.setConversationState("assistant_speaking");
+        }
         break;
 
-      case "response.done":
+      case "output_audio_buffer.stopped":
+      case "output_audio_buffer.cleared":
+        this.isAudioOutputActive = false;
+        if (this.conversationState !== "user_speaking") {
+          this.setConversationState("listening");
+        }
+        break;
+
+      case "response.done": {
+        const respObj =
+          parsed && typeof parsed.response === "object" && parsed.response !== null
+            ? (parsed.response as Record<string, unknown>)
+            : null;
+        const respStatus =
+          respObj && typeof respObj.status === "string" ? respObj.status : "";
+
+        if (respStatus === "cancelled" || respStatus === "incomplete") {
+          this.isAudioOutputActive = false;
+        }
+
+        // Preserve user_speaking if response.done arrives asynchronously after barge-in,
+        // and preserve assistant_speaking while WebRTC output_audio_buffer is still draining.
+        if (
+          this.conversationState !== "user_speaking" &&
+          !this.isAudioOutputActive
+        ) {
+          this.setConversationState("listening");
+        }
+        break;
+      }
+
       case "response.cancelled":
       case "response.cancel":
-        this.setConversationState("listening");
+        this.isAudioOutputActive = false;
+        if (this.conversationState !== "user_speaking") {
+          this.setConversationState("listening");
+        }
         break;
 
       default:

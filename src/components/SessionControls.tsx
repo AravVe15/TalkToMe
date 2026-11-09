@@ -56,7 +56,10 @@ export function SessionControls({
       style={{
         position: "sticky",
         bottom: 0,
-        backgroundColor: "rgba(255, 255, 255, 0.95)",
+        backgroundColor: "rgba(255, 255, 255, 0.92)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        transform: "translateZ(0)",
         borderTop: "1px solid #e2e8f0",
         paddingBottom:
           "calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
@@ -140,6 +143,7 @@ export function SessionControls({
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <input
             type="text"
+            aria-label="Message text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type a message..."

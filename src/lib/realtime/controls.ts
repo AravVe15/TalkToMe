@@ -133,13 +133,9 @@ export function interruptAssistant(options: {
     return false;
   }
 
-  // 1. Immediately halt remote audio playback
+  // 1. Silencing via client muting without pausing live WebRTC audio stream (ADR-06, ADR-07 / AC-07.3)
   if (audioElement) {
-    try {
-      audioElement.pause?.();
-    } catch {
-      // Ignore audio pause errors
-    }
+    audioElement.muted = true;
   }
 
   // 2. Finalize in-progress assistant turn in transcript
@@ -283,13 +279,9 @@ export class RealtimeControlsManager {
     // 1. Immediately transition conversation sub-state to user_speaking
     this.setConversationState("user_speaking");
 
-    // 2. Immediately halt active remote audio playback
+    // 2. Client-side audio silencing without pausing live WebRTC audio stream (ADR-06, ADR-07 / AC-07.3)
     if (this.audioElement) {
-      try {
-        this.audioElement.pause?.();
-      } catch {
-        // Ignore audio pause errors
-      }
+      this.audioElement.muted = true;
     }
 
     // 3. Finalize in-progress assistant turn, marking it as interrupted
@@ -304,27 +296,36 @@ export class RealtimeControlsManager {
       }
     }
 
-    // 4. Send cancel and clear buffer events over data channel to stop outbound server audio
-    const cancelEvent = { type: "response.cancel" };
-    const clearBufferEvent = { type: "output_audio_buffer.clear" };
-
-    if (typeof this.options.sendEvent === "function") {
-      try {
-        this.options.sendEvent(cancelEvent);
-        this.options.sendEvent(clearBufferEvent);
-      } catch {
-        // Safe guard against send errors
-      }
-    } else if (this.dataChannel && this.dataChannel.readyState === "open") {
-      try {
-        this.dataChannel.send(JSON.stringify(cancelEvent));
-        this.dataChannel.send(JSON.stringify(clearBufferEvent));
-      } catch {
-        // Safe guard against closed channel during send
-      }
-    }
+    // 4. Eliminate redundant server cancellation dispatches on Server VAD barge-in (ADR-07 / AC-07.4)
+    // Server VAD (interrupt_response: true) halts RTP packets and cancels the response natively.
+    // Redundant client cancellation is omitted to avoid response_cancel_not_active protocol errors.
 
     return true;
+  }
+
+  /**
+   * Ensures the remote WebRTC `<audio>` element is actively playing and unmuted
+   * when a new assistant response begins streaming (ADR-06, ADR-07 / AC-07.5).
+   */
+  ensureAudioPlayback(): void {
+    if (this.audioElement) {
+      this.audioElement.muted = false;
+      if (this.audioElement.paused) {
+        try {
+          const playPromise = this.audioElement.play?.();
+          if (
+            playPromise !== undefined &&
+            typeof playPromise.catch === "function"
+          ) {
+            playPromise.catch((err: unknown) => {
+              console.error("Audio playback resumption error:", err);
+            });
+          }
+        } catch (err: unknown) {
+          console.error("Audio playback invocation error:", err);
+        }
+      }
+    }
   }
 
   /**
@@ -403,6 +404,12 @@ export class RealtimeControlsManager {
       if (this.transcriptManager.conversationState === "assistant_speaking") {
         return true;
       }
+      const ext = this.transcriptManager as unknown as {
+        isAudioOutputActive?: boolean;
+      };
+      if (ext.isAudioOutputActive) {
+        return true;
+      }
       const items = this.transcriptManager.getItems();
       if (
         items.some(
@@ -417,3 +424,9 @@ export class RealtimeControlsManager {
 }
 
 export { RealtimeControlsManager as RealtimeControls };
+
+declare module "@/lib/realtime/controls" {
+  interface RealtimeControlsManager {
+    ensureAudioPlayback(): void;
+  }
+}

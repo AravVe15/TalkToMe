@@ -162,32 +162,44 @@ This document tracks durable technical and design decisions. Every significant d
 ---
 
 ### ADR-06: WebRTC Session Lifecycle & Deterministic Resource Teardown
-- **Status**: Accepted
-- **Context**: Managing asynchronous browser states across ingestion, token minting, microphone capture, SDP exchange (`POST https://api.openai.com/v1/realtime?model=...`), active conversation, and teardown requires strict lifecycle control to prevent memory leaks or stuck mobile microphone indicators.
+- **Status**: Accepted (Amended for WebRTC `<audio>` MediaStream Persistence & Teardown Boundary)
+- **Context**: Managing asynchronous browser states across ingestion, token minting, microphone capture, SDP exchange (`POST https://api.openai.com/v1/realtime/calls`), active conversation, and teardown requires strict lifecycle control to prevent memory leaks, browser autoplay lockouts, or stuck mobile microphone indicators.
 - **Decision**:
   1. Implement an explicit client session state machine:
      - Primary states: `idle` -> `ingesting` -> `ready` -> `connecting` -> `connected` -> `reconnecting` -> `error`.
      - Conversation flow sub-states (when `connected`): `listening`, `user_speaking`, `assistant_thinking`, `assistant_speaking`.
-  2. Enforce a deterministic `cleanupSession()` routine invoked on `"Stop"`, source switch (uploading a new PDF or submitting a new YouTube URL), or component unmount that synchronously:
+  2. **WebRTC MediaStream Audio Element Invariant**:
+     - The remote HTML5 `<audio>` element bound to the WebRTC downstream `MediaStream` (`audioElement.srcObject = remoteStream`) MUST remain attached and playing (`audioElement.paused === false`) for the entire duration of the active call session.
+     - **NEVER** call `audioElement.pause()` during active conversation turns, speech interruptions, or barge-in events. An `<audio>` element connected to a real-time RTP stream is a continuous media decoder sink, not a static file playback buffer. Pausing it disrupts the live WebRTC decoding pipeline and trips browser Autoplay Policy restrictions: because subsequent assistant responses arrive via asynchronous `RTCDataChannel` network events (which possess zero user gesture context), any subsequent `.play()` call rejects with `NotAllowedError`, causing permanent voice silence.
+  3. Enforce a deterministic `cleanupSession()` routine invoked ONLY on explicit call termination (clicking `"Stop"`, switching to a new PDF/YouTube source while connected, or component unmount) that synchronously:
      - Calls `track.stop()` on all local `MediaStreamTrack`s.
-     - Pauses the remote `<audio>` element and sets `audioElement.srcObject = null`.
+     - Pauses the remote `<audio>` element (`audioElement.pause()`), removes event listeners, and releases media resources by setting `audioElement.srcObject = null`.
      - Closes the `oai-events` `RTCDataChannel` and `RTCPeerConnection`.
-- **Rationale**: An explicit finite state machine with deterministic media-track and peer-connection cleanup prevents orphaned WebRTC sessions, ghost audio playback, and stuck mobile microphone indicators.
+- **Rationale**: Keeping the `<audio>` element active and playing throughout the call preserves browser autoplay authorization established during the initial user gesture ("Start Voice Chat"), preventing unhandled `NotAllowedError` rejections and post-interruption audio deadlocks while ensuring clean teardown on call exit.
 - **Consequences**:
-  - Switching sources while in a call cleanly terminates the previous session and resets the conversation transcript before priming the new source.
+  - Voice output transitions seamlessly across multiple conversational turns without requiring repeated user activation.
+  - Final teardown cleanly releases audio decoders, peer connections, and local microphone hardware.
 
 ---
 
-### ADR-07: Speech Interruption (Barge-In) & Natural Follow-Up (Review Script Step 3)
-- **Status**: Accepted
-- **Context**: Review Script Step 3 mandates: *"Test on mobile: start a voice conversation, interrupt, follow up naturally."*
+### ADR-07: Speech Interruption (Barge-In), Stream Silence & Natural Follow-Up (Review Script Step 3)
+- **Status**: Accepted (Amended for Wire/Mute Audio Silence & Server VAD Cancellation Semantics)
+- **Context**: Review Script Step 3 mandates: *"Test on mobile: start a voice conversation, interrupt, follow up naturally."* When interrupting or barging in, halting assistant voice output must never pause the underlying HTML5 `<audio>` element (ADR-06), and client signaling must not race with native Server VAD cancellation.
 - **Decision**:
-  1. **Automatic Voice Barge-In**: Rely on WebRTC + Server VAD (`interrupt_response: true`), which automatically stops OpenAI's outbound media stream and truncates unplayed server audio buffers when user speech is detected (`input_audio_buffer.speech_started`).
-  2. **Immediate Client State Sync**: Upon receiving `input_audio_buffer.speech_started` over `oai-events` while the assistant is speaking, immediately transition the conversation sub-state to `user_speaking` and finalize the interrupted assistant transcript item in the UI (marking it as interrupted rather than discarding already-spoken text).
-  3. **Manual Interrupt Control**: Provide a tappable **"Interrupt"** button while the assistant is speaking that sends `{ type: "response.cancel" }` and `{ type: "output_audio_buffer.clear" }` over `oai-events`.
-- **Rationale**: Combining WebRTC's native Server-VAD audio truncation with immediate UI state transitions and a manual `response.cancel` button guarantees responsive, natural barge-in on mobile devices.
+  1. **Automatic Voice Barge-In via Server VAD**:
+     - Rely on WebRTC + Server VAD (`turn_detection: { type: "server_vad", interrupt_response: true }`). When user speech is detected, OpenAI's server automatically halts outbound RTP audio packets, cancels the active response, and broadcasts `input_audio_buffer.speech_started` followed by `response.done (status: "cancelled")`.
+     - **No Redundant Client Cancellation on Speech Started**: Because the server cancels the response natively under `interrupt_response: true`, client code MUST NOT send a redundant `{ type: "response.cancel" }` over `oai-events` upon receiving `speech_started`. Sending an unprompted `response.cancel` creates a protocol race condition where the server rejects the request with `response_cancel_not_active` errors.
+  2. **Immediate Client State Sync & Wire/Mute Audio Silence**:
+     - Upon receiving `input_audio_buffer.speech_started` over `oai-events` while the assistant is speaking, immediately transition the conversation sub-state to `user_speaking` and finalize the interrupted assistant transcript item in the UI (preserving already-spoken words).
+     - **Mechanism for Instant Silence (No DOM Pausing)**: The `<audio>` element is NEVER paused (`audioElement.pause()` is strictly forbidden during interruption). Instantaneous silencing of residual jitter-buffer frames is achieved either on the wire (OpenAI server cutting off outbound RTP packets) or via client-side muting (temporarily setting `audioElement.muted = true` or `remoteTrack.enabled = false` until `output_audio_buffer.cleared` / `response.done`, then unmuting). The media pipeline remains continuously authorized and active.
+  3. **Manual Interrupt Control**:
+     - Provide a tappable **"Interrupt"** button active while the assistant is speaking. Tapping "Interrupt" is an explicit user action that sends `{ type: "response.cancel" }` and `{ type: "output_audio_buffer.clear" }` over `oai-events`, transitions state to `listening`, and silences output without pausing the `<audio>` element.
+  4. **Seamless Subsequent Turn Playback**:
+     - Because `audioElement.paused` remains `false` throughout the interruption, subsequent assistant responses (whether triggered by user speech via Server VAD or text prompt via data channel) resume audio playback immediately and automatically through the live WebRTC track without requiring user clicks or triggering Autoplay Policy rejections.
+- **Rationale**: Relying on server-side wire cutoff and transient muting instead of DOM pausing respects the WebRTC MediaStream lifecycle and browser Autoplay policies, eliminating post-interruption voice silence while preventing protocol race conditions on automatic barge-in.
 - **Consequences**:
-  - Users can interrupt the assistant either by speaking naturally or by tapping the Interrupt button.
+  - Barge-in and manual interruption feel instantaneous and natural.
+  - The voice assistant never goes silent on follow-up turns after an interruption.
 
 ---
 

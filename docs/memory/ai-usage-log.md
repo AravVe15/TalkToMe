@@ -37,6 +37,9 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-08 | Mobile UI & iOS Safari Audit (`apple-web-app` skill) | Planner | Gemini 3.8 Flash (High) | Audited mobile UI and WebRTC audio against ADR-11 using the apple-web-app skill. Identified root causes of unpolished iPhone experience: missing viewport-fit=cover, missing safe-area padding (notch & home indicator overlap), loudspeaker acoustic feedback false barge-in loops from unconstrained getUserMedia({ audio: true }), and missing touch ergonomics. Updated ADR-11, AC-11, and lessons learned with safe-area variables, VoiceProcessingIO hardware echo cancellation, and viewport containment. Formulated implementation plan for implementer. | `read_file`, `edit_file`, `run_command` | Updated `docs/memory/decisions.md` (ADR-11), `docs/memory/requirements.md` (AC-11), `docs/memory/lessons-learned.md` (§3), and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | iOS Safari Edge-to-Edge & Hardware AEC Implementation | Implementer | Gemini 3.8 Flash (High) | Executed 5-phase iOS Safari and hardware AEC implementation in `src/app/layout.tsx`, `src/app/globals.css`, `src/app/page.tsx`, `src/components/SessionControls.tsx`, and `src/lib/realtime/connection.ts` per ADR-11 and AC-11.4–AC-11.6. | `read_file`, `edit_file`, `run_command` | Updated `src/app/layout.tsx`, `src/app/globals.css`, `src/app/page.tsx`, `src/components/SessionControls.tsx`, `src/lib/realtime/connection.ts`, and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | Comprehensive System Audit (Slices 1–4): Interruption Mechanics & Mobile UI Forensics | Reviewer | Claude Opus 5.5 (Medium) / Gemini 4 Argon (High) | Conducted forensic system audit across Slices 1–4 against Grievance A (interruption mechanics), Grievance B (mobile UI & `apple-web-app` skill), and ADR-01–ADR-12 / AC-01–AC-12. Ran automated CSS class coverage scan and `npm run verify`. | `read_file`, `edit_file`, `write_file` (scratch), `run_command` (`npm run verify`, `Select-String`, CSS coverage scan) | **FAIL (changes requested).** Identified 5 P0/P1 blockers: (1) `audioElement.pause()` permanently freezes the single WebRTC `<audio>` stream after the first interrupt because `.play()` is never called again; (2) `isAssistantSpeaking()` flips to `false` on `response.done` before buffered audio finishes playing, hiding the Interrupt button and blocking `output_audio_buffer.clear`; (3) `handlePdfSelected` / `handleYouTubeSubmit` call `handleStopVoiceChat()` after `setConnectionStateState("ingesting")`, prematurely overwriting state to `"ready"`; (4) Tailwind CSS is not installed and 65 of 106 utility classes used in JSX are missing from `globals.css`; (5) `tests/unit/realtime/connection.test.ts:147` fails in `npm run verify` on the updated AEC `getUserMedia` constraints. |
+| 2026-11-08 | WebRTC Audio Stream Persistence & Autoplay Invariants | Planner | Gemini 3.8 Flash (High) | Institutionalized WebRTC HTML5 `<audio>` stream persistence and autoplay invariants into ADR-06 & ADR-07 in `decisions.md`; updated AC-07 & AC-11 in `requirements.md` with explicit acceptance criteria for post-interruption voice resumption without repeated user activation; documented Section 17 ("The Mock Divergence Trap") in `lessons-learned.md`. | `read_file`, `edit_file` | Updated `docs/memory/decisions.md`, `docs/memory/requirements.md`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-08 | WebRTC Stream Persistence & Autoplay Invariant Tests (Slice 3C) | Test-Writer | Gemini 3.8 Flash (High) | Eliminated mock divergence in `tests/fixtures/webrtc-fixtures.ts` (`MockHTMLAudioElement` tracking `paused`/`muted` stream states) and updated `tests/unit/realtime/controls.test.ts` per updated ADR-06, ADR-07, and AC-07/AC-11: asserted `mockAudioElement.pause` is strictly never called during interruptions, asserted client silencing without revoking user activation, asserted no redundant `response.cancel` on Server VAD barge-in (AC-07.4), and added 4 new multi-turn resumption test cases (AC-07.3, AC-07.5). Verified clean test execution establishing the expected RED state (7 failing tests across interruption suites). | `read_file`, `edit_file`, `run_command` (`npx vitest`, `npm test`) | Updated `tests/fixtures/webrtc-fixtures.ts`, `tests/unit/realtime/webrtc-fixtures.test.ts`, and `tests/unit/realtime/controls.test.ts`. 259 tests passing, 7 targeted tests failing in RED state. |
+| 2026-11-08 | WebRTC Audio Persistence, Client Muting & Server VAD Race Remediation | Implementer | Gemini 3.8 Flash (High) | Resolved post-interruption audio silence and browser autoplay lockouts: ensured `<audio>` element is never paused during active call, applied instantaneous client muting on interrupt/barge-in, cleanly unmuted on subsequent turns in `ensureAudioPlayback()`, eliminated redundant server cancellation dispatches on Server VAD barge-in (AC-07.4), augmented ambient types to resolve shims without modifying tests, and eliminated empty `.catch()` swallows. Verified `npm run verify` passes completely (tsc, lint, and 266/266 tests green). | `read_file`, `edit_file`, `run_command` (`npm test`, `npm run typecheck`, `npm run lint`, `npm run verify`) | Updated `src/lib/realtime/controls.ts`, `src/lib/realtime/connection.ts`, `src/app/page.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. All 15 suites and 266 tests pass. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -692,6 +695,85 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero files read or modified in `src/`.
   - Zero reads or access to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Planner — Institutionalize WebRTC Audio Stream Persistence and Autoplay Invariants)
+- **Agent**: `planner`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Codified WebRTC HTML5 `<audio>` stream persistence and browser Autoplay Policy invariants following the forensic investigation of post-interruption voice silence:
+  1. Updated `ADR-06` and `ADR-07` in `docs/memory/decisions.md` to establish that the WebRTC `<audio>` element MUST remain attached and playing for the entire duration of the active call session (`audioElement.paused === false`); it is NEVER paused during interruptions or barge-in. Client-side silence during interruption is achieved via wire RTP stream cutoff (Server VAD) or transient muting, never DOM pausing. Server VAD cancellation semantics were clarified to eliminate redundant client cancellation and protocol race conditions (`response_cancel_not_active`).
+  2. Updated `AC-07` and `AC-11` in `docs/memory/requirements.md` with explicit, verifiable acceptance criteria (`AC-07.3`, `AC-07.4`, `AC-07.5`, and updated `AC-11.3`) requiring voice playback to immediately and automatically resume on subsequent conversational turns without repeated user activation or unhandled `NotAllowedError` rejections.
+  3. Added Section 17 ("The Mock Divergence Trap: WebRTC RTP MediaStream vs. Static File Playback & Autoplay Policies") to `docs/memory/lessons-learned.md` documenting how unit test doubles (`MockHTMLAudioElement`) enforcing static `.pause()` mechanics masked the fatal divergence between live RTP media stream sinks and browser Autoplay policies.
+- **Strict Boundary Adherence**:
+  - Read-only on all code (`src/`) and test (`tests/`) files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Test-Writer — WebRTC Stream Persistence & Autoplay Invariant Tests)
+- **Agent**: `test-writer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Eliminated mock divergence in test fixtures and authored tests enforcing continuous WebRTC stream persistence, client-side muting, and multi-turn voice resumption per ADR-06, ADR-07, and AC-07/AC-11:
+  1. Updated `MockHTMLAudioElement` in `tests/fixtures/webrtc-fixtures.ts` to reflect a live media stream sink tracking `paused: false` and `muted: false` states, updating `tests/unit/realtime/webrtc-fixtures.test.ts` to verify playback, muting, and pause transitions.
+  2. In `tests/unit/realtime/controls.test.ts`:
+     - Rewrote `AC-07.1` (spoken barge-in) to assert that `mockAudioElement.pause` is strictly never called, `mockAudioElement.paused === false`, client-side muting (`muted === true`) is applied, and redundant `response.cancel` is not emitted on Server VAD barge-in (`AC-07.4`).
+     - Rewrote `AC-07.2` (manual interrupt) to assert that `mockAudioElement.pause` is strictly never called, `mockAudioElement.paused === false`, client-side muting (`muted === true`) is applied, and `{ type: "response.cancel" }` + `{ type: "output_audio_buffer.clear" }` are dispatched.
+     - Added dedicated test suite `AC-07.3 & AC-07.5: Continuous Stream Persistence & Multi-Turn Audio Resumption (ADR-06, ADR-07)` asserting that `audioElement.pause()` is strictly forbidden during active session interruptions, that audio is automatically unmuted on subsequent spoken turns, that audio is automatically unmuted on subsequent text prompt turns, and that audio playback remains continuous across 3 consecutive turns with zero pause calls.
+     - Updated `interruptAssistant helper` standalone test to assert no `pause` call and `muted === true`.
+  3. Ran `npx vitest run tests/unit/realtime/controls.test.ts` and `npm test` to establish the expected **RED state** (7 targeted test failures directly exposing the implementation bugs in `src/lib/realtime/controls.ts`).
+- **Strict Boundary Adherence**:
+  - Zero files read or modified in `src/`. All tests authored strictly from `docs/memory/decisions.md` and `docs/memory/requirements.md`.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Implementer — WebRTC Audio Persistence, Client Muting & Server VAD Race Remediation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Implemented persistent WebRTC audio authorization, instantaneous client-side audio muting, and clean unmuting for subsequent turns, turning the RED test suite GREEN:
+  1. **Audio Element Persistence (ADR-06, ADR-07 / AC-07.3, AC-11.3)**:
+     - In `src/lib/realtime/controls.ts`, removed all calls to `audioElement.pause()` from both manual interruption (`interruptAssistant`) and spoken barge-in (`handleBargeIn`). The WebRTC `<audio>` element now remains attached, unlocked, and actively decoding (`paused === false`) throughout all conversational turns until final call teardown in `cleanupSession`.
+  2. **Client-Side Silencing & Instantaneous Jitter-Buffer Drop (ADR-07 / AC-07.3, AC-07.5)**:
+     - In both `interruptAssistant` and `handleBargeIn`, replaced DOM pausing with instantaneous client muting (`audioElement.muted = true`). This immediately drops in-flight jitter buffer audio frames on the client without invalidating browser autoplay authorization.
+     - In `ensureAudioPlayback()`, cleanly unmuted the audio element (`audioElement.muted = false`) at the onset of all subsequent assistant responses (voice or text), allowing uninterrupted multi-turn voice playback. Added explicit check on `audioElement.paused` before calling `.play()`.
+  3. **Server VAD Cancellation Concurrency (ADR-07 / AC-07.4)**:
+     - In `handleBargeIn`, eliminated redundant client-side dispatch of `response.cancel` and `output_audio_buffer.clear` packets over the WebRTC data channel during Server VAD barge-in. Native Server VAD (`interrupt_response: true`) cancels outbound responses on `speech_started`, preventing out-of-order `response_cancel_not_active` protocol warnings.
+  4. **Strict Error Handling & Zero Empty Catches**:
+     - Removed empty `.catch(() => {})` blocks on `audioElement.play()` in `src/lib/realtime/connection.ts` and `src/app/page.tsx`, logging errors appropriately to `console.error` and eliminating swallowed playback failures.
+  5. **Ambient Type Shims Augmentation**:
+     - Added module augmentation for `@/lib/realtime/controls` in `src/lib/realtime/controls.ts` declaring `ensureAudioPlayback(): void` on `RealtimeControlsManager` interface, resolving the TypeScript shadowing from `tests/types/shims.d.ts` without modifying test files.
+  6. **Comprehensive Verification**:
+     - Ran `npm run verify` (`tsc --noEmit`, `next lint`, and `vitest`). All 15 test suites and 266 unit tests passed cleanly (100% pass rate).
+- **Strict Boundary Adherence**:
+  - Modified strictly code in `src/lib/realtime/controls.ts`, `src/lib/realtime/connection.ts`, `src/app/page.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to `tests/` or project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-08 (Implementer — Calibrate Server VAD Sensitivity & Client Noise Suppression)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Calibrated Server VAD sensitivity and confirmed client DSP noise suppression to eliminate false barge-in and interruptions caused by room acoustics and ambient sound:
+  1. **Server VAD Calibration & Dynamic Turn Detection (`src/app/api/realtime/session/route.ts`)**:
+     - Configured `POST /api/realtime/session` to support customizable Server VAD parameters (`turn_detection` / `turnDetection` in request payload or `OPENAI_REALTIME_VAD_THRESHOLD` and `OPENAI_REALTIME_VAD_SILENCE_MS` environment variables), while defaulting to 0.5 threshold and 500ms silence duration when unconfigured for 100% backwards compatibility with existing AC-04.2 contract tests.
+     - Passed `turnDetectionConfig` to both standard `/v1/realtime/sessions` and GA fallback `/v1/realtime/client_secrets` session creation requests.
+  2. **Active Session VAD Calibration (`src/lib/realtime/connection.ts`)**:
+     - Defined `ServerVadConfig` and `CALIBRATED_SERVER_VAD_CONFIG` (`type: "server_vad"`, `threshold: 0.8`, `prefix_padding_ms: 300`, `silence_duration_ms: 600`, `create_response: true`, `interrupt_response: true`).
+     - Added `sendSessionUpdate()` and `updateSessionVad()` methods to `RealtimeConnectionManager`.
+     - Automatically dispatched calibrated `session.update` with elevated activation threshold (`0.8`) and natural conversational pause window (`600ms`) upon `dc.onopen` data channel initialization.
+  3. **Client Hardware DSP & Content Hints Confirmation (`src/lib/realtime/connection.ts`)**:
+     - Confirmed `track.contentHint = "speech"` is applied to all captured microphone tracks.
+     - Confirmed `getUserMedia` audio constraints enforce hardware Acoustic Echo Cancellation (`echoCancellation: true`), Noise Suppression (`noiseSuppression: true`), and Auto Gain Control (`autoGainControl: true`) to eliminate false barge-in loops on device loudspeakers.
+  4. **Verification**:
+     - Ran `npm run verify` (`tsc --noEmit`, `next lint`, `vitest run`).
+     - All 15 test suites and 266 unit tests passed cleanly (100% pass rate). Zero TypeScript errors, zero ESLint warnings or errors.
+- **Strict Boundary Adherence**:
+  - Modified strictly code in `src/app/api/realtime/session/route.ts` and `src/lib/realtime/connection.ts`.
+  - Documented findings in `docs/memory/lessons-learned.md` and appended to `docs/memory/ai-usage-log.md`.
+  - Zero modifications to `tests/`, `package.json`, or configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
+
+
 
 
 

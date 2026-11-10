@@ -67,9 +67,9 @@ export interface RealtimeSessionResources {
 
 const envRealtimeModel =
   typeof process !== "undefined" &&
-  process.env &&
-  typeof process.env.OPENAI_REALTIME_MODEL === "string" &&
-  process.env.OPENAI_REALTIME_MODEL.trim().length > 0
+    process.env &&
+    typeof process.env.OPENAI_REALTIME_MODEL === "string" &&
+    process.env.OPENAI_REALTIME_MODEL.trim().length > 0
     ? process.env.OPENAI_REALTIME_MODEL.trim()
     : undefined;
 
@@ -167,7 +167,7 @@ export class RealtimeConnectionManager {
     this.audioElement = options.audioElement ?? null;
     this.reconnectTimeoutMs =
       typeof options.reconnectTimeoutMs === "number" &&
-      options.reconnectTimeoutMs > 0
+        options.reconnectTimeoutMs > 0
         ? options.reconnectTimeoutMs
         : DEFAULT_RECONNECT_TIMEOUT_MS;
   }
@@ -287,6 +287,7 @@ export class RealtimeConnectionManager {
         const remoteStream = event.streams?.[0] ?? null;
         if (this.audioElement && remoteStream) {
           this.audioElement.srcObject = remoteStream;
+          this.audioElement.volume = 0.5;
           try {
             const playPromise = this.audioElement.play?.();
             if (
@@ -335,6 +336,10 @@ export class RealtimeConnectionManager {
         if (typeof event.data === "string") {
           try {
             const parsed: unknown = JSON.parse(event.data);
+
+            const loggable = parsed as Record<string, any>;
+            console.log("🔥 GA VAD CONFIG:", loggable.session?.audio?.input?.turn_detection);
+
             this.options.onEvent?.(parsed);
           } catch {
             this.options.onEvent?.(event.data);
@@ -403,10 +408,10 @@ export class RealtimeConnectionManager {
         err instanceof Error
           ? err
           : new Error(
-              typeof err === "string"
-                ? err
-                : "Failed to establish WebRTC Realtime session."
-            );
+            typeof err === "string"
+              ? err
+              : "Failed to establish WebRTC Realtime session."
+          );
       this.options.onError?.(normalizedError);
       throw err;
     }
@@ -456,7 +461,13 @@ export class RealtimeConnectionManager {
       ...config,
     };
     return this.sendSessionUpdate({
-      turn_detection: vad,
+      type: "realtime",
+      audio: {
+        input: {
+          noise_reduction: { type: "far_field" },
+          turn_detection: vad,
+        },
+      },
     });
   }
 

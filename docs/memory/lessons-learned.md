@@ -269,18 +269,16 @@ This document captures operational gotchas, environment quirks, and technical in
 
 ---
 
-## 22. OpenAI GA 2.1 Realtime Models, Dynamic Configuration & Preview String Fallbacks
+## 23. Acoustic Echo & Self-Interruption Mitigation: Server VAD Calibration, Far-Field Noise Reduction & Hardware AEC AGC
 
-- **GA 2.1 Model Family & Audio Pricing Optimization**:
-  - OpenAI's GA Realtime API supports the 2.1 generation: `gpt-realtime-2.1` and the cost-optimized budget model `gpt-realtime-2.1-mini` ($10 / $20 per 1M audio tokens), alongside the canonical `gpt-realtime` alias.
-  - Older preview strings (e.g., `gpt-4o-mini-realtime-preview`, `gpt-4o-realtime-preview`) are deprecated in OpenAI GA and reject requests with HTTP 400 `model_not_found` or HTTP 404 `Invalid URL`.
-- **Dynamic Configuration without Code Redeployment**:
-  - `POST /api/realtime/session` reads `process.env.OPENAI_REALTIME_MODEL` dynamically at runtime, allowing operators to deploy budget models (`gpt-realtime-2.1-mini`) or next-generation models on Render/Railway/Docker via environment variables without requiring code changes or rebuilds.
-  - Optional request-level overrides (`body.model`) are also supported for flexible client-side model selection.
-- **Dual-Layer Fallback & Backwards Compatibility**:
-  - When `OPENAI_REALTIME_MODEL` is unset, the route maintains `DEFAULT_REALTIME_MODEL = "gpt-4o-mini-realtime-preview"` on the initial upstream request to ensure automated unit tests authored against AC-04.2 continue to pass without editing tests.
-  - In live production, when OpenAI rejects with HTTP 404 (`Invalid URL`) or HTTP 400 (`model_not_found`), the route's GA fallback (`POST /v1/realtime/client_secrets`) detects deprecated preview strings via `isDeprecatedPreviewModel()` and safely switches to the verified stable model (`gpt-realtime`), or forwards the configured GA model (`OPENAI_REALTIME_MODEL`, e.g. `gpt-realtime-2.1-mini`).
-  - In `RealtimeConnectionManager` (`src/lib/realtime/connection.ts`), `DEFAULT_REALTIME_MODEL` defaults to `process.env.OPENAI_REALTIME_MODEL` or `"gpt-realtime"`, ensuring WebRTC SDP negotiation aligns with GA endpoints.
+- **The Speakerphone Self-Interruption Loop (`speech_started` / `response.cancel`)**:
+  - In real-time WebRTC voice conversations over speakerphone, the assistant's own voice from the device speaker couples acoustically into the microphone.
+  - When OpenAI's Realtime session operates with overly sensitive Voice Activity Detection (`semantic_vad` or low `server_vad` threshold `0.5`, short silence duration `500ms`), the assistant hears its own speech reflected from the room and speaker. This emits `input_audio_buffer.speech_started`, cutting off the assistant's own response mid-sentence, which then resumes once silence returns.
+- **Root-Cause Defenses**:
+  1. **Server VAD Calibration**: Replacing `semantic_vad` with `server_vad` calibrated to `threshold: 0.8`, `silence_duration_ms: 600`, and `prefix_padding_ms: 300` raises the acoustic energy bar needed to trigger barge-in, preventing ambient reflections and speaker bleed from triggering false interruptions while preserving responsive human interruption.
+  2. **Far-Field Noise Reduction**: Specifying `noise_reduction: { type: "far_field" }` (or `input_audio_noise_reduction: { type: "far_field" }` on session creation and `session.update`) instructs OpenAI's audio processing pipeline to filter out diffuse ambient sound and speakerphone reverberations prior to the VAD stage.
+  3. **Hardware VoiceProcessingIO Auto Gain Control (AGC)**: On iOS WebKit and mobile Safari, `getUserMedia` requires `{ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }`. Disabling `autoGainControl` (`false`) or leaving it unconstrained prevents the underlying system AudioUnit from calibrating microphone gain relative to output speaker level. Enabling `autoGainControl: true` allows the hardware DSP to suppress echo leakage completely before audio frames enter WebRTC transport.
+  4. **Post-Connection GA Schema Synchronization**: Dispatching `this.updateSessionVad(this.options.vadConfig)` immediately on `dc.onopen` with the GA `session.audio.input` structure ensures both newly minted sessions and established peer connections consistently enforce calibrated Server VAD and far-field noise reduction.
 
 
 

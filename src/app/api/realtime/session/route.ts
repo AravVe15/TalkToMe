@@ -141,7 +141,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const envModel =
     typeof process.env.OPENAI_REALTIME_MODEL === "string" &&
-    process.env.OPENAI_REALTIME_MODEL.trim().length > 0
+      process.env.OPENAI_REALTIME_MODEL.trim().length > 0
       ? process.env.OPENAI_REALTIME_MODEL.trim()
       : undefined;
 
@@ -184,7 +184,7 @@ export async function POST(req: Request): Promise<Response> {
         : typeof process.env.OPENAI_REALTIME_VAD_THRESHOLD === "string" &&
           !isNaN(parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD))
           ? parseFloat(process.env.OPENAI_REALTIME_VAD_THRESHOLD)
-          : 0.5;
+          : 0.8;
 
   const vadSilenceDurationMs =
     typeof clientVad?.silence_duration_ms === "number"
@@ -196,7 +196,7 @@ export async function POST(req: Request): Promise<Response> {
           : typeof process.env.OPENAI_REALTIME_VAD_SILENCE_MS === "string" &&
             !isNaN(parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10))
             ? parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10)
-            : 500;
+            : 600;
 
   const vadPrefixPaddingMs =
     typeof clientVad?.prefix_padding_ms === "number"
@@ -234,6 +234,9 @@ export async function POST(req: Request): Promise<Response> {
     modalities: ["audio", "text"],
     voice,
     instructions,
+    input_audio_noise_reduction: {
+      type: "far_field",
+    },
     input_audio_transcription: {
       model: "whisper-1",
     },
@@ -299,6 +302,9 @@ export async function POST(req: Request): Promise<Response> {
                 instructions,
                 audio: {
                   input: {
+                    noise_reduction: {
+                      type: "far_field",
+                    },
                     transcription: {
                       model: "whisper-1",
                     },

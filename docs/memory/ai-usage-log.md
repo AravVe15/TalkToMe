@@ -42,6 +42,7 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-08 | WebRTC Audio Persistence, Client Muting & Server VAD Race Remediation | Implementer | Gemini 3.8 Flash (High) | Resolved post-interruption audio silence and browser autoplay lockouts: ensured `<audio>` element is never paused during active call, applied instantaneous client muting on interrupt/barge-in, cleanly unmuted on subsequent turns in `ensureAudioPlayback()`, eliminated redundant server cancellation dispatches on Server VAD barge-in (AC-07.4), augmented ambient types to resolve shims without modifying tests, and eliminated empty `.catch()` swallows. Verified `npm run verify` passes completely (tsc, lint, and 266/266 tests green). | `read_file`, `edit_file`, `run_command` (`npm test`, `npm run typecheck`, `npm run lint`, `npm run verify`) | Updated `src/lib/realtime/controls.ts`, `src/lib/realtime/connection.ts`, `src/app/page.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. All 15 suites and 266 tests pass. |
 | 2026-11-08 | Slice 5: Production Hosting & Container Deployment Architecture | Planner | Gemini 4 Argon (High) | Conducted end-to-end architectural evaluation for production containerization and public cloud hosting (Render / Railway) per Deliverable #1. Authored `ADR-13` in `decisions.md`, `AC-13` (`AC-13.1`–`AC-13.5`) and Section 2.6 in `requirements.md`, and Section 20 in `lessons-learned.md` covering multi-stage `node:20-bookworm-slim` builds, `pdfjs-dist` dynamic worker/font/CMap preservation without modifying `next.config.ts`, `NODE_OPTIONS` heap sizing for 25 MB PDFs, `GET /api/health` readiness probes with strict secret redaction, public HTTPS WebRTC topology, and the downstream execution plan for `test-writer`, `implementer`, and `reviewer`. | `read_file`, `edit_file` | Updated `docs/memory/decisions.md` (ADR-13), `docs/memory/requirements.md` (Section 2.6, AC-13), `docs/memory/lessons-learned.md` (§20), and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | Slice 5: Production Containerization & Deployment Health Unit Tests | Test-Writer | Gemini 3.8 Flash (High) | Authored comprehensive test suite for Slice 5 (`tests/unit/deploy/deployment.test.ts`) covering AC-13.1–AC-13.4 and ADR-13: GET /api/health and getDeploymentHealth() readiness checks, 4 required pdfjs-dist asset checks, canary secret non-leakage, container port/hostname resolution (10000, 8080, invalid fallbacks to 3000), and multi-stage Dockerfile / .dockerignore / Render / Railway manifest specifications. Added ambient module declarations to `tests/types/shims.d.ts`. Verified clean TypeScript typechecking (0 errors) and confirmed clean RED phase test failure. | `read_file`, `edit_file`, `write_file`, `run_command` (`npx tsc`, `npx vitest`) | Created `tests/unit/deploy/deployment.test.ts`, updated `tests/types/shims.d.ts`, and updated `docs/memory/ai-usage-log.md`. Clean RED phase confirmed. |
+| 2026-11-09 | Acoustic Echo & Self-Interruption Remediation | Implementer | Gemini 3.8 Flash (High) | Applied Server VAD threshold calibration (0.8 threshold, 600ms silence), far-field noise reduction on session minting and GA client_secrets fallback, enabled hardware VoiceProcessingIO autoGainControl (true) on getUserMedia, and synchronized GA session update on data channel open to eliminate speakerphone self-interruption and false barge-in loops. | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/app/api/realtime/session/route.ts`, `src/lib/realtime/connection.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -874,6 +875,31 @@ This document records the use of AI-assisted tools and models throughout the lif
 - **Strict Boundary Adherence**:
   - Modified strictly `src/app/api/realtime/session/route.ts`, `src/lib/realtime/connection.ts`, `src/types/realtime.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
   - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-09 (Implementer — Acoustic Echo & Self-Interruption Remediation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Remediated acoustic echo / self-interruption bug where the assistant hears its own voice over speakerphone, cuts itself off (`input_audio_buffer.speech_started`), and resumes once silence returns:
+  1. **Server VAD Calibration & Far-Field Noise Reduction (`src/app/api/realtime/session/route.ts`)**:
+     - Updated fallback defaults for `vadThreshold` (from `0.5` to `0.8`) and `vadSilenceDurationMs` (from `500` to `600`).
+     - Replaced hardcoded `semantic_vad` `turnDetectionConfig` with `server_vad` using parsed VAD variables.
+     - Added `input_audio_noise_reduction: { type: "far_field" }` to initial `openAiPayload`.
+     - Added `noise_reduction: { type: "far_field" }` inside `session.audio.input` in the GA `client_secrets` fallback fetch payload.
+  2. **Hardware VoiceProcessingIO Auto Gain Control (`src/lib/realtime/connection.ts`)**:
+     - Enabled `autoGainControl: true` in `getUserMedia` constraints to activate hardware echo cancellation and gain adjustment in WebKit / mobile browsers.
+  3. **GA Schema Session Update on Data Channel Open (`src/lib/realtime/connection.ts`)**:
+     - Uncommented `this.updateSessionVad(this.options.vadConfig)` in `dc.onopen`.
+     - Updated `updateSessionVad()` to dispatch GA `session.audio.input` configuration with `noise_reduction: { type: "far_field" }` and calibrated Server VAD.
+  4. **Verification**:
+     - Verified `npm run typecheck` (`tsc --noEmit`) passes cleanly with 0 errors.
+     - Verified `npm run lint` (`next lint`) passes cleanly with 0 warnings or errors.
+  5. **Documentation**:
+     - Recorded operational findings in Section 23 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/app/api/realtime/session/route.ts`, `src/lib/realtime/connection.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to `tests/` or protected project configuration files.
   - Zero access or reads to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
 

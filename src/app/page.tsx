@@ -412,7 +412,7 @@ export default function Home(props: any) {
         ref={audioRef}
         autoPlay
         playsInline
-        className="hidden"
+        className="sr-only"
         aria-hidden="true"
       />
 

@@ -580,6 +580,7 @@ export class TranscriptManager {
       case "response.audio.delta":
       case "response.output_audio.delta":
         if (this.conversationState !== "user_speaking") {
+          this.isAudioOutputActive = true; 
           this.setConversationState("assistant_speaking");
         }
         break;

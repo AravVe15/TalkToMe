@@ -605,3 +605,276 @@ main,
 .animate-pulse {
   animation: pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ==========================================================================
+   Modern iOS 18 / Voice AI App Shell & Polish
+   ========================================================================== */
+
+.h-dvh {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.max-h-dvh {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+.min-h-0 {
+  min-height: 0;
+}
+
+.shrink-0 {
+  flex-shrink: 0;
+}
+
+.overflow-hidden {
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Modern App Cards */
+.ios-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05),
+    0 1px 3px 0 rgba(15, 23, 42, 0.03);
+}
+
+/* Scrollable Chat Feed Container */
+.transcript-feed {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 20px;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02),
+    0 4px 20px -2px rgba(15, 23, 42, 0.05);
+}
+
+/* Chat Bubbles */
+.bubble-user {
+  align-self: flex-end;
+  margin-left: auto;
+  max-width: 82%;
+  padding: 0.75rem 1rem;
+  border-radius: 18px 18px 4px 18px;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.22);
+  animation: bubbleIn 0.18s ease-out;
+}
+
+.bubble-assistant {
+  align-self: flex-start;
+  margin-right: auto;
+  max-width: 86%;
+  padding: 0.75rem 1rem;
+  border-radius: 18px 18px 18px 4px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  animation: bubbleIn 0.18s ease-out;
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Streaming Word Cursor & Soundwave Dots */
+.streaming-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 14px;
+  margin-left: 4px;
+  vertical-align: middle;
+  border-radius: 3px;
+  background-color: currentColor;
+  opacity: 0.75;
+  animation: pulse 0.9s infinite;
+}
+
+.voice-wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 14px;
+}
+
+.voice-wave span {
+  display: inline-block;
+  width: 3px;
+  height: 100%;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: waveBounce 1s ease-in-out infinite;
+}
+
+.voice-wave span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.voice-wave span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes waveBounce {
+  0%, 100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* Glassmorphic Bottom Controls Dock */
+.ios-dock {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(226, 232, 240, 0.85);
+  padding: 0.75rem 1rem calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  box-shadow: 0 -8px 24px -4px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+/* Modern Pill Action Buttons */
+.dock-pill-btn {
+  min-height: 46px;
+  min-width: 44px;
+  flex: 1 1 0%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.625rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: all 0.15s ease;
+}
+
+.dock-pill-mute {
+  background-color: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+}
+
+.dock-pill-mute:hover {
+  background-color: #e2e8f0;
+}
+
+.dock-pill-muted {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.dock-pill-interrupt {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: #ffffff;
+  border: 1px solid #d97706;
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.28);
+}
+
+.dock-pill-end {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  border: 1px solid #dc2626;
+  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
+}
+
+/* iMessage-Style Pill Input Bar */
+.ios-input-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 9999px;
+  padding: 0.25rem 0.35rem 0.25rem 1rem;
+  transition: all 0.15s ease;
+}
+
+.ios-input-pill:focus-within {
+  background-color: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.ios-input-field {
+  flex: 1 1 0%;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 16px;
+  line-height: 1.4;
+  padding: 0.45rem 0;
+  color: #0f172a;
+}
+
+.ios-input-field:focus {
+  outline: none;
+  box-shadow: none !important;
+}
+
+.ios-send-btn {
+  min-height: 38px;
+  min-width: 68px;
+  padding: 0.45rem 0.95rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.ios-send-btn-active {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+.ios-send-btn-disabled {
+  background-color: #cbd5e1;
+  color: #64748b;
+}

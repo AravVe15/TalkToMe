@@ -404,9 +404,22 @@ export default function Home(props: any) {
 
   const isConnected = connectionState === "connected";
   const canStartVoiceChat = connectionState === "ready";
+  const showTranscriptArea =
+    isConnected ||
+    connectionState === "connecting" ||
+    connectionState === "reconnecting" ||
+    isTextFallback ||
+    transcript.length > 0 ||
+    safeProps.initialTranscript !== undefined;
 
   return (
-    <main className="max-w-md mx-auto min-h-dvh flex flex-col overflow-x-hidden bg-slate-50 text-slate-900">
+    <main
+      className={`max-w-md mx-auto flex flex-col bg-slate-50 text-slate-900 ${
+        isConnected || isTextFallback
+          ? "h-dvh max-h-dvh overflow-hidden"
+          : "min-h-dvh overflow-x-hidden"
+      }`}
+    >
       {/* Remote Audio Element for WebRTC audio playback (ADR-11 / AC-11.3) */}
       <audio
         ref={audioRef}
@@ -416,83 +429,83 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Top Application Header (ADR-11, AC-11.4 / apple-web-app sticky safe-area header) */}
+      {/* Top Application Header */}
       <header
-        className="sticky top-0 z-20 p-4 bg-white border-b border-gray-200 shadow-sm"
+        className="sticky top-0 z-20 px-4 py-3 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs shrink-0"
         style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 20,
-          minHeight:
-            "calc(3.5rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
           paddingTop:
-            "calc(0.875rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
-          backgroundColor: "#ffffff",
+            "calc(0.75rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
         }}
       >
-        <h1
-          className="text-lg font-bold text-slate-900"
-          style={{ fontSize: "18px", margin: 0, letterSpacing: "-0.015em" }}
-        >
-          Talk to a Document or YouTube Video
-        </h1>
-        <p
-          className="text-xs text-muted"
-          style={{ color: "var(--text-muted)", margin: "4px 0 0" }}
-        >
-          Live voice conversations powered by OpenAI Realtime API
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h1 className="text-base font-bold text-slate-900 tracking-tight">
+              Talk to a Document or YouTube Video
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Live voice conversations powered by OpenAI Realtime API
+            </p>
+          </div>
+        </div>
       </header>
 
-      {/* Error Alert Banner (AC-01.2, AC-02, AC-03, AC-04) */}
+      {/* Error Alert Banner */}
       {error && (
         <div
           role="alert"
-          className="m-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded-md text-sm font-medium"
-          style={{
-            backgroundColor: "#fef2f2",
-            borderColor: "#fecaca",
-            color: "#991b1b",
-          }}
+          className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-medium shadow-xs shrink-0"
         >
           {error}
         </div>
       )}
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col gap-4 p-4">
-        {/* Source Ingestion Controls (Slice 1) */}
-        {!isConnected && (
-          <SourceIngestion
+      <div
+        className={`flex-1 flex flex-col gap-3 p-4 ${
+          isConnected || isTextFallback ? "min-h-0 overflow-hidden" : ""
+        }`}
+      >
+        {/* Top Controls / Context Area (shrink-0 during active call so transcript gets remaining space) */}
+        <div className="flex flex-col gap-3 shrink-0">
+          {!isConnected && (
+            <SourceIngestion
+              connectionState={connectionState}
+              canStartVoiceChat={canStartVoiceChat}
+              onPdfSelected={handlePdfSelected}
+              onYouTubeSubmit={handleYouTubeSubmit}
+              onStartVoiceChat={handleStartVoiceChat}
+            />
+          )}
+
+          {source && (
+            <SourcePreview
+              source={source}
+              expanded={isPreviewExpanded}
+              onToggleExpanded={() =>
+                setPreviewExpandedState(!isPreviewExpanded)
+              }
+            />
+          )}
+
+          <SessionStatus
             connectionState={connectionState}
-            canStartVoiceChat={canStartVoiceChat}
-            onPdfSelected={handlePdfSelected}
-            onYouTubeSubmit={handleYouTubeSubmit}
-            onStartVoiceChat={handleStartVoiceChat}
+            conversationState={conversationState}
+            onReconnect={handleStartVoiceChat}
           />
+        </div>
+
+        {/* Real-Time Synchronized Conversation Transcript (scrollable flex-1 container during call) */}
+        {showTranscriptArea && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <ConversationTranscript
+              transcript={transcript}
+              conversationState={conversationState}
+            />
+          </div>
         )}
-
-        {/* Source Text Preview & Truncation Banner (ADR-05, ADR-11 / AC-05, AC-11.1) */}
-        {source && (
-          <SourcePreview
-            source={source}
-            expanded={isPreviewExpanded}
-            onToggleExpanded={() => setPreviewExpandedState(!isPreviewExpanded)}
-          />
-        )}
-
-        {/* Session & Network Status Indicators (ADR-06, ADR-10 / AC-06.3, AC-10.1, AC-10.3) */}
-        <SessionStatus
-          connectionState={connectionState}
-          conversationState={conversationState}
-          onReconnect={handleStartVoiceChat}
-        />
-
-        {/* Real-Time Synchronized Conversation Transcript (Slice 3B / AC-08) */}
-        <ConversationTranscript transcript={transcript} />
       </div>
 
-      {/* Sticky Bottom Dock: Voice & Text Controls (ADR-07, ADR-09, ADR-11 / AC-06.2, AC-07.2, AC-09, AC-11.2) */}
+      {/* Sticky Bottom Dock: Voice & Text Controls */}
       <SessionControls
         connectionState={connectionState}
         conversationState={conversationState}

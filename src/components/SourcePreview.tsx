@@ -24,7 +24,7 @@ export function SourcePreview({
   const isTruncated = source.charCount > 48_000;
 
   return (
-    <div className="flex flex-col gap-3 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="ios-card flex flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-col flex-1 min-w-0">
           <span
@@ -53,8 +53,16 @@ export function SourcePreview({
           type="button"
           aria-expanded={expanded}
           onClick={onToggleExpanded}
-          className="min-h-[44px] min-w-[44px] py-3 px-4 text-xs font-semibold rounded-md border border-gray-200 bg-slate-50"
-          style={{ minHeight: "44px", minWidth: "44px", whiteSpace: "nowrap" }}
+          className="min-h-[38px] min-w-[44px] py-2 px-3.5 text-xs font-semibold rounded-full border border-gray-200 bg-slate-100 text-slate-800"
+          style={{
+            minHeight: "38px",
+            minWidth: "44px",
+            borderRadius: "9999px",
+            backgroundColor: expanded ? "#e2e8f0" : "#f1f5f9",
+            borderColor: "#cbd5e1",
+            color: "#1e293b",
+            whiteSpace: "nowrap",
+          }}
         >
           {expanded ? "Hide Preview" : "Show Preview"}
         </button>
@@ -83,7 +91,8 @@ export function SourcePreview({
         <div
           className="p-3 bg-slate-50 border border-gray-200 rounded-md text-xs overflow-y-auto whitespace-pre-wrap font-mono"
           style={{
-            maxHeight: "220px",
+            maxHeight: "180px",
+            borderRadius: "12px",
             backgroundColor: "#f8fafc",
             borderColor: "#e2e8f0",
             fontSize: "12px",

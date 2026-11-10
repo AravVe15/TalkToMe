@@ -238,7 +238,7 @@ export async function POST(req: Request): Promise<Response> {
       type: "far_field",
     },
     input_audio_transcription: {
-      model: "whisper-1",
+      model: "gpt-4o-mini-transcribe",
     },
     turn_detection: turnDetectionConfig,
   };
@@ -306,7 +306,7 @@ export async function POST(req: Request): Promise<Response> {
                       type: "far_field",
                     },
                     transcription: {
-                      model: "whisper-1",
+                      model: "gpt-4o-mini-transcribe",
                     },
                     turn_detection: turnDetectionConfig,
                   },

@@ -45,42 +45,23 @@ export function SessionControls({
     }
   };
 
-  // Do not render controls dock if not connected and not in text fallback mode
   if (!isConnected && !isTextFallback) {
     return null;
   }
 
   return (
-    <footer
-      className="sticky bottom-0 left-0 right-0 p-3 bg-white/95 backdrop-blur border-t border-gray-200 shadow-lg flex flex-col gap-2 z-10 sticky-dock"
-      style={{
-        position: "sticky",
-        bottom: 0,
-        backgroundColor: "rgba(255, 255, 255, 0.92)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        transform: "translateZ(0)",
-        borderTop: "1px solid #e2e8f0",
-        paddingBottom:
-          "calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
-      }}
-    >
+    <footer className="ios-dock sticky-dock">
       {/* Microphone Unavailable Text Fallback Banner (AC-09.1) */}
       {showTextFallbackBanner && (
         <div
           role="status"
-          className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-md text-xs font-semibold text-center"
-          style={{
-            backgroundColor: "#fffbeb",
-            borderColor: "#fde68a",
-            color: "#78350f",
-          }}
+          className="p-2 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs font-semibold text-center"
         >
           Microphone unavailable — using text chat mode
         </div>
       )}
 
-      {/* Voice Action Buttons Row (when connected) */}
+      {/* Voice Action Pill Buttons Row (when connected) */}
       {isConnected && (
         <div className="flex items-center justify-between gap-2">
           {/* Mute / Unmute Button (AC-09.3) */}
@@ -88,19 +69,47 @@ export function SessionControls({
             <button
               type="button"
               onClick={onToggleMute}
-              className={`min-h-[44px] min-w-[44px] py-3 px-4 font-semibold text-sm rounded-md border flex-1 ${
-                isMuted
-                  ? "bg-amber-50 border-amber-300 text-amber-900"
-                  : "bg-slate-50 border-gray-200 text-slate-800"
+              className={`dock-pill-btn ${
+                isMuted ? "dock-pill-muted" : "dock-pill-mute"
               }`}
-              style={{
-                minHeight: "44px",
-                minWidth: "44px",
-                backgroundColor: isMuted ? "#fffbeb" : "#f8fafc",
-                borderColor: isMuted ? "#fde68a" : "#e2e8f0",
-              }}
             >
-              {isMuted ? "Unmute" : "Mute"}
+              {isMuted ? (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                  <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              ) : (
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              )}
+              <span>{isMuted ? "Unmute" : "Mute"}</span>
             </button>
           )}
 
@@ -109,15 +118,18 @@ export function SessionControls({
             <button
               type="button"
               onClick={onInterrupt}
-              className="min-h-[44px] min-w-[44px] py-3 px-4 font-bold text-sm text-white bg-amber-600 rounded-md flex-1"
-              style={{
-                minHeight: "44px",
-                minWidth: "44px",
-                backgroundColor: "#d97706",
-                color: "#ffffff",
-              }}
+              className="dock-pill-btn dock-pill-interrupt"
             >
-              Interrupt
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2.5" />
+              </svg>
+              <span>Interrupt</span>
             </button>
           )}
 
@@ -125,42 +137,62 @@ export function SessionControls({
           <button
             type="button"
             onClick={onStop}
-            className="min-h-[44px] min-w-[44px] py-3 px-4 font-bold text-sm text-white bg-red-600 rounded-md flex-1"
-            style={{
-              minHeight: "44px",
-              minWidth: "44px",
-              backgroundColor: "#dc2626",
-              color: "#ffffff",
-            }}
+            className="dock-pill-btn dock-pill-end"
           >
-            End Call
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
+              <line x1="22" y1="2" x2="2" y2="22" />
+            </svg>
+            <span>End Call</span>
           </button>
         </div>
       )}
 
-      {/* Text Chat Input Dock & Send Button (AC-09.2, AC-11.2) */}
+      {/* iMessage-Style Text Input Pill (AC-09.2, AC-11.2) */}
       {(isTextFallback || isConnected) && (
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+        <form onSubmit={handleSubmit} className="ios-input-pill">
           <input
             type="text"
             aria-label="Message text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type a message..."
-            className="text-base flex-1 py-3 px-4 border border-gray-200 rounded-md"
-            style={{ fontSize: "16px", minHeight: "44px" }}
+            className="ios-input-field"
           />
           <button
             type="submit"
             disabled={!inputText.trim()}
-            className="min-h-[44px] min-w-[44px] py-3 px-4 font-bold text-sm text-white bg-blue-600 rounded-md"
-            style={{
-              minHeight: "44px",
-              minWidth: "44px",
-              backgroundColor: inputText.trim() ? "#2563eb" : "#94a3b8",
-            }}
+            className={`ios-send-btn ${
+              inputText.trim()
+                ? "ios-send-btn-active"
+                : "ios-send-btn-disabled"
+            }`}
           >
-            Send
+            <span>Send</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
           </button>
         </form>
       )}

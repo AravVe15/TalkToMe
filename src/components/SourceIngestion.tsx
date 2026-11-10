@@ -36,7 +36,7 @@ export function SourceIngestion({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="ios-card flex flex-col gap-4 p-4">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">1. Choose a Source</h2>
         <p className="text-xs text-muted" style={{ color: "var(--text-muted)" }}>
@@ -59,8 +59,13 @@ export function SourceIngestion({
           accept=".pdf,application/pdf"
           disabled={isIngesting || isConnecting}
           onChange={handleFileChange}
-          className="text-base py-2 px-3 border border-gray-200 rounded-md"
-          style={{ fontSize: "16px", minHeight: "44px" }}
+          className="text-base py-2 px-3 border border-slate-300 rounded-xl"
+          style={{
+            fontSize: "16px",
+            minHeight: "44px",
+            borderRadius: "12px",
+            borderColor: "#cbd5e1",
+          }}
         />
       </div>
 
@@ -85,14 +90,31 @@ export function SourceIngestion({
             onChange={(e) => setYoutubeUrl(e.target.value)}
             placeholder="Paste YouTube video URL (e.g. https://youtu.be/...)"
             disabled={isIngesting || isConnecting}
-            className="text-base py-3 px-4 border border-gray-200 rounded-md"
-            style={{ fontSize: "16px", minHeight: "44px" }}
+            className="text-base py-3 px-4 border border-slate-300 rounded-xl"
+            style={{
+              fontSize: "16px",
+              minHeight: "44px",
+              borderRadius: "12px",
+              borderColor: "#cbd5e1",
+            }}
           />
           <button
             type="submit"
             disabled={isIngesting || isConnecting || !youtubeUrl.trim()}
-            className="min-h-[44px] min-w-[44px] py-3 px-4 font-semibold text-white bg-blue-600 rounded-md"
-            style={{ minHeight: "44px", minWidth: "44px" }}
+            className="min-h-[44px] min-w-[44px] py-3 px-4 font-semibold text-white rounded-xl transition-all"
+            style={{
+              minHeight: "44px",
+              minWidth: "44px",
+              borderRadius: "12px",
+              background:
+                !isIngesting && !isConnecting && youtubeUrl.trim()
+                  ? "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)"
+                  : "#94a3b8",
+              boxShadow:
+                !isIngesting && !isConnecting && youtubeUrl.trim()
+                  ? "0 3px 10px rgba(37, 99, 235, 0.22)"
+                  : "none",
+            }}
           >
             Load Video
           </button>
@@ -115,16 +137,22 @@ export function SourceIngestion({
           type="button"
           disabled={!canStartVoiceChat}
           onClick={onStartVoiceChat}
-          className={`min-h-[44px] min-w-[44px] py-3 px-4 w-full font-bold text-white rounded-md text-base ${
+          className={`min-h-[44px] min-w-[44px] py-3 px-4 w-full font-bold text-white rounded-2xl text-base transition-all ${
             canStartVoiceChat
-              ? "bg-blue-600 cursor-pointer shadow-md"
-              : "bg-gray-400 cursor-not-allowed opacity-60"
+              ? "cursor-pointer"
+              : "cursor-not-allowed opacity-60"
           }`}
           style={{
             minHeight: "44px",
             minWidth: "44px",
-            backgroundColor: canStartVoiceChat ? "#2563eb" : "#94a3b8",
             width: "100%",
+            borderRadius: "14px",
+            background: canStartVoiceChat
+              ? "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)"
+              : "#94a3b8",
+            boxShadow: canStartVoiceChat
+              ? "0 4px 14px rgba(37, 99, 235, 0.28)"
+              : "none",
           }}
         >
           Start Voice Chat

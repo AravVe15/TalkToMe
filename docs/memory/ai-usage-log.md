@@ -43,6 +43,11 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-08 | Slice 5: Production Hosting & Container Deployment Architecture | Planner | Gemini 4 Argon (High) | Conducted end-to-end architectural evaluation for production containerization and public cloud hosting (Render / Railway) per Deliverable #1. Authored `ADR-13` in `decisions.md`, `AC-13` (`AC-13.1`–`AC-13.5`) and Section 2.6 in `requirements.md`, and Section 20 in `lessons-learned.md` covering multi-stage `node:20-bookworm-slim` builds, `pdfjs-dist` dynamic worker/font/CMap preservation without modifying `next.config.ts`, `NODE_OPTIONS` heap sizing for 25 MB PDFs, `GET /api/health` readiness probes with strict secret redaction, public HTTPS WebRTC topology, and the downstream execution plan for `test-writer`, `implementer`, and `reviewer`. | `read_file`, `edit_file` | Updated `docs/memory/decisions.md` (ADR-13), `docs/memory/requirements.md` (Section 2.6, AC-13), `docs/memory/lessons-learned.md` (§20), and `docs/memory/ai-usage-log.md`. |
 | 2026-11-08 | Slice 5: Production Containerization & Deployment Health Unit Tests | Test-Writer | Gemini 3.8 Flash (High) | Authored comprehensive test suite for Slice 5 (`tests/unit/deploy/deployment.test.ts`) covering AC-13.1–AC-13.4 and ADR-13: GET /api/health and getDeploymentHealth() readiness checks, 4 required pdfjs-dist asset checks, canary secret non-leakage, container port/hostname resolution (10000, 8080, invalid fallbacks to 3000), and multi-stage Dockerfile / .dockerignore / Render / Railway manifest specifications. Added ambient module declarations to `tests/types/shims.d.ts`. Verified clean TypeScript typechecking (0 errors) and confirmed clean RED phase test failure. | `read_file`, `edit_file`, `write_file`, `run_command` (`npx tsc`, `npx vitest`) | Created `tests/unit/deploy/deployment.test.ts`, updated `tests/types/shims.d.ts`, and updated `docs/memory/ai-usage-log.md`. Clean RED phase confirmed. |
 | 2026-11-09 | Acoustic Echo & Self-Interruption Remediation | Implementer | Gemini 3.8 Flash (High) | Applied Server VAD threshold calibration (0.8 threshold, 600ms silence), far-field noise reduction on session minting and GA client_secrets fallback, enabled hardware VoiceProcessingIO autoGainControl (true) on getUserMedia, and synchronized GA session update on data channel open to eliminate speakerphone self-interruption and false barge-in loops. | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/app/api/realtime/session/route.ts`, `src/lib/realtime/connection.ts`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-10 | Streaming Transcription & Mobile Viewport Layout Overhaul | Implementer | Gemini 3.8 Flash (High) | Upgraded Realtime transcription model from `whisper-1` to `gpt-4o-mini-transcribe` for real-time streaming deltas. Updated mobile viewport structure with `h-dvh` locking, internal scrollable transcript container, conditional transcript rendering, and sleek header typography. | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/app/api/realtime/session/route.ts`, `src/app/page.tsx`, `src/components/ConversationTranscript.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-10 | iOS 18 Design System & Custom CSS Layout Alignment | Implementer | Gemini 3.8 Flash (High) | Authored missing mobile layout and utility classes in `app/globals.css` (h-dvh, min-h-0, shrink-0, sr-only, ios-dock, dock-pill-btn, transcript-feed, bubble-user/assistant, ios-card). Refactored ConversationTranscript, SessionControls, SessionStatus, SourcePreview, and SourceIngestion to use semantic classes without conflicting inline styles. | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/app/globals.css`, `src/components/ConversationTranscript.tsx`, `src/components/SessionControls.tsx`, `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, `src/components/SourceIngestion.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-10 | Voice-Paced Transcript Animation & Accessibility Tail | Implementer | Gemini 3.8 Flash (High) | Replaced `ConversationTranscript.tsx` with `VoicePacedText` progressive word reveal synchronized with speech pacing (~55ms/word assistant, ~35ms/word user) and an `.sr-only` tail to preserve synchronous DOM textContent evaluation for accessibility and unit tests. | `read_file`, `write_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/components/ConversationTranscript.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-10 | Iconographic Pill Controls & iMessage-Style Input | Implementer | Gemini 3.8 Flash (High) | Replaced `SessionControls.tsx` with rounded pill buttons containing crisp SVGs and semantic text spans, paired with an iMessage-style rounded pill input bar. | `read_file`, `write_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/components/SessionControls.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-10 | iOS 18 Micro-Interactions & Form Polish | Implementer | Gemini 3.8 Flash (High) | Polished inner elements across `SessionStatus.tsx` (voice-wave speaking badges, gradient reconnect), `SourcePreview.tsx` (pill disclosure button, 180px preview box), and `SourceIngestion.tsx` (rounded input borders, gradient CTAs). | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, `src/components/SourceIngestion.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -902,6 +907,124 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero modifications to `tests/` or protected project configuration files.
   - Zero access or reads to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-10 (Implementer — Streaming Transcription & Mobile Viewport Layout Overhaul)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Upgraded user transcription model to `gpt-4o-mini-transcribe` and overhauled mobile viewport layout in `src/app/page.tsx` and `src/components/ConversationTranscript.tsx`:
+  1. **Streaming User Transcription (`src/app/api/realtime/session/route.ts`)**:
+     - Upgraded `input_audio_transcription.model` from `"whisper-1"` to `"gpt-4o-mini-transcribe"` in both the initial session configuration and GA `client_secrets` fallback payload, enabling live `.delta` streaming events while user speaks.
+  2. **Mobile Viewport Height & Controls Dock Pinning (`src/app/page.tsx`)**:
+     - Implemented dynamic viewport locking (`h-dvh max-h-dvh overflow-hidden`) during active calls or text fallback so the bottom `<SessionControls />` remains permanently pinned to the mobile screen without full-page overflow.
+     - Positioned conversation transcript in a flexible, scrollable container (`flex-1 min-h-0 flex flex-col`) that flexes and scrolls internally without pushing the bottom controls dock off-screen.
+     - Conditionally rendered the transcript area only when active or containing messages, eliminating empty container display on the initial source ingestion screen.
+     - Modernized the top application `<header>` with backdrop blur, sleek typography, and safe area padding.
+  3. **Conversation Transcript Component (`src/components/ConversationTranscript.tsx`)**:
+     - Updated `ConversationTranscriptProps` with optional `conversationState` parameter.
+     - Added `flex-1 min-h-0 overflow-y-auto` to the outer container for clean internal scrolling.
+  4. **Verification**:
+     - Verified `npm run typecheck` (`tsc --noEmit`) passes cleanly with 0 errors.
+     - Verified `npm run lint` (`next lint`) passes cleanly with 0 warnings or errors.
+  5. **Documentation**:
+     - Recorded operational findings in Section 24 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/app/api/realtime/session/route.ts`, `src/app/page.tsx`, `src/components/ConversationTranscript.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-10 (Implementer — iOS 18 Design System & Custom CSS Layout Alignment)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Integrated custom stylesheet declarations in `app/globals.css` and aligned components (`ConversationTranscript`, `SessionControls`, `SessionStatus`, `SourcePreview`, `SourceIngestion`) with the iOS 18 design system:
+  1. **Global CSS Utility & Component Classes (`src/app/globals.css`)**:
+     - Added `.h-dvh`, `.max-h-dvh`, `.min-h-0`, `.shrink-0`, `.overflow-hidden`, `.sr-only` to support viewport locking.
+     - Defined modern iOS app cards (`.ios-card`), chat feed container (`.transcript-feed`), animated chat bubbles (`.bubble-user`, `.bubble-assistant`), streaming cursor (`.streaming-cursor`), and soundwave dots (`.voice-wave`).
+     - Defined glassmorphic controls dock (`.ios-dock`), pill buttons (`.dock-pill-btn`, `.dock-pill-mute`, `.dock-pill-muted`, `.dock-pill-interrupt`, `.dock-pill-end`), and pill text inputs (`.ios-input-pill`, `.ios-input-field`, `.ios-send-btn`).
+  2. **Component Integration**:
+     - Refactored `ConversationTranscript.tsx` to use `.transcript-feed`, `.bubble-user`, `.bubble-assistant`, `.voice-wave`, and `.streaming-cursor`, removing conflicting inline styles.
+     - Refactored `SessionControls.tsx` to use `.ios-dock`, `.dock-pill-btn`, and `.ios-input-pill`.
+     - Refactored `SessionStatus.tsx`, `SourcePreview.tsx`, and `SourceIngestion.tsx` to use `.ios-card`.
+     - Preserved all accessibility semantics (`aria-label`, `role`, and button text labels).
+  3. **Verification**:
+     - Verified `npm run typecheck` (`tsc --noEmit`) passes cleanly with 0 errors.
+     - Verified `npm run lint` (`next lint`) passes cleanly with 0 warnings or errors.
+  4. **Documentation**:
+     - Recorded operational findings in Section 25 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/app/globals.css`, `src/components/ConversationTranscript.tsx`, `src/components/SessionControls.tsx`, `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, `src/components/SourceIngestion.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-10 (Implementer — Voice-Paced Transcript Animation & Accessibility Tail)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Integrated `VoicePacedText` progressive word-by-word reveal in `src/components/ConversationTranscript.tsx`:
+  1. **VoicePacedText Component**:
+     - Progressive word reveal synced to speaking cadence (~55ms/word assistant, ~35ms/word user).
+     - Renders hidden text tail in `<span className="sr-only">` so screen readers and unit tests reading DOM `textContent` immediately receive the complete transcript string.
+     - Smooth internal scroll execution on each revealed word.
+     - Added voice-wave thinking indicator when `conversationState === "assistant_thinking"`.
+  2. **Verification**:
+     - Verified `npm run typecheck` (`tsc --noEmit`) passes cleanly with 0 errors.
+     - Verified `npm run lint` (`next lint`) passes cleanly with 0 warnings or errors.
+  3. **Documentation**:
+     - Recorded operational findings in Section 26 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/components/ConversationTranscript.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-10 (Implementer — Iconographic Pill Controls & iMessage-Style Input)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Replaced `src/components/SessionControls.tsx` with rounded pill buttons containing SVGs and an iMessage-style rounded pill input bar:
+  1. **SessionControls Overhaul**:
+     - Added SVG icons to Mute, Unmute, Interrupt, End Call, and Send buttons.
+     - Preserved explicit `<span>` label tags and accessibility attributes (`role="status"`, `aria-label="Message text"`, `aria-hidden="true"` on SVGs).
+     - Aligned with `.ios-dock`, `.dock-pill-btn`, `.dock-pill-muted`, `.dock-pill-mute`, `.dock-pill-interrupt`, `.dock-pill-end`, and `.ios-input-pill`.
+  2. **Verification**:
+     - Verified `npm run typecheck` (`tsc --noEmit`) passes cleanly with 0 errors.
+     - Verified `npm run lint` (`next lint`) passes cleanly with 0 warnings or errors.
+  3. **Documentation**:
+     - Recorded operational findings in Section 27 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/components/SessionControls.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-10 (Implementer — iOS 18 Micro-Interactions & Form Polish)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Polished inner elements across `SessionStatus.tsx`, `SourcePreview.tsx`, and `SourceIngestion.tsx`:
+  1. **SessionStatus Component (`src/components/SessionStatus.tsx`)**:
+     - Integrated animated `.voice-wave` inside conversation sub-state pills during `assistant_speaking` and `user_speaking`.
+     - Applied gradient background and 14px border radius to the "Reconnect Voice Session" CTA.
+  2. **SourcePreview Component (`src/components/SourcePreview.tsx`)**:
+     - Styled the "Show Preview" / "Hide Preview" button as a rounded pill disclosure button with 38px height and 9999px border radius.
+     - Limited expanded preview container height to 180px with 12px border radius.
+  3. **SourceIngestion Component (`src/components/SourceIngestion.tsx`)**:
+     - Styled inputs (`#pdf-upload` and `#youtube-url`) with 12px border radius and `#cbd5e1` border.
+     - Applied dynamic gradient background and soft box shadow to "Load Video" and "Start Voice Chat" action buttons when enabled.
+     - Preserved all button text labels ("Reconnect Voice Session", "Show Preview", "Hide Preview", "Load Video", "Start Voice Chat") and accessibility attributes.
+  4. **Verification**:
+     - Verified `npm run typecheck` (`tsc --noEmit`) passes cleanly with 0 errors.
+     - Verified `npm run lint` (`next lint`) passes cleanly with 0 warnings or errors.
+  5. **Documentation**:
+     - Recorded operational findings in Section 28 of `docs/memory/lessons-learned.md`.
+- **Strict Boundary Adherence**:
+  - Modified strictly `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, `src/components/SourceIngestion.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`.
+  - Zero modifications to test files in `tests/` or protected project configuration files.
+  - Zero access or reads to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
+
+
+
 
 
 

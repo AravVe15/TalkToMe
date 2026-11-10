@@ -269,16 +269,17 @@ This document captures operational gotchas, environment quirks, and technical in
 
 ---
 
-## 23. Acoustic Echo & Self-Interruption Mitigation: Server VAD Calibration, Far-Field Noise Reduction & Hardware AEC AGC
+## 28. Micro-Interactions, Dynamic Gradient Affordances & Fluid Form Touch Targets
 
-- **The Speakerphone Self-Interruption Loop (`speech_started` / `response.cancel`)**:
-  - In real-time WebRTC voice conversations over speakerphone, the assistant's own voice from the device speaker couples acoustically into the microphone.
-  - When OpenAI's Realtime session operates with overly sensitive Voice Activity Detection (`semantic_vad` or low `server_vad` threshold `0.5`, short silence duration `500ms`), the assistant hears its own speech reflected from the room and speaker. This emits `input_audio_buffer.speech_started`, cutting off the assistant's own response mid-sentence, which then resumes once silence returns.
-- **Root-Cause Defenses**:
-  1. **Server VAD Calibration**: Replacing `semantic_vad` with `server_vad` calibrated to `threshold: 0.8`, `silence_duration_ms: 600`, and `prefix_padding_ms: 300` raises the acoustic energy bar needed to trigger barge-in, preventing ambient reflections and speaker bleed from triggering false interruptions while preserving responsive human interruption.
-  2. **Far-Field Noise Reduction**: Specifying `noise_reduction: { type: "far_field" }` (or `input_audio_noise_reduction: { type: "far_field" }` on session creation and `session.update`) instructs OpenAI's audio processing pipeline to filter out diffuse ambient sound and speakerphone reverberations prior to the VAD stage.
-  3. **Hardware VoiceProcessingIO Auto Gain Control (AGC)**: On iOS WebKit and mobile Safari, `getUserMedia` requires `{ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }`. Disabling `autoGainControl` (`false`) or leaving it unconstrained prevents the underlying system AudioUnit from calibrating microphone gain relative to output speaker level. Enabling `autoGainControl: true` allows the hardware DSP to suppress echo leakage completely before audio frames enter WebRTC transport.
-  4. **Post-Connection GA Schema Synchronization**: Dispatching `this.updateSessionVad(this.options.vadConfig)` immediately on `dc.onopen` with the GA `session.audio.input` structure ensures both newly minted sessions and established peer connections consistently enforce calibrated Server VAD and far-field noise reduction.
+- **State-Driven Call-To-Action Affordance**:
+  - Dynamically applying vibrant gradient backgrounds (`linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)`) and soft colored elevation shadows to primary CTA buttons (`Start Voice Chat`, `Load Video`, `Reconnect Voice Session`) only when inputs are valid and actionable creates intuitive visual hierarchy without distracting disabled states.
+- **Embedded Audio Transport Indicators**:
+  - Embedding `.voice-wave` micro-animations directly inside conversation sub-state pills during `assistant_speaking` and `user_speaking` provides clear peripheral confirmation of active WebRTC audio transmission across noisy mobile environments.
+
+
+
+
+
 
 
 

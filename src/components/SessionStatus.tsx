@@ -22,7 +22,7 @@ export function SessionStatus({
   const isError = connectionState === "error";
 
   return (
-    <div className="flex flex-col gap-2 p-3 bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="ios-card flex flex-col gap-2 p-3">
       <div className="flex items-center justify-between gap-2">
         {/* Connection State Badge */}
         <div className="flex items-center gap-2">
@@ -58,7 +58,7 @@ export function SessionStatus({
         {/* Conversation Sub-State Badge (when connected) */}
         {isConnected && (
           <div
-            className="px-2.5 py-1 rounded-full text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
             style={{
               backgroundColor:
                 conversationState === "assistant_speaking"
@@ -78,10 +78,20 @@ export function SessionStatus({
                       : "#475569",
             }}
           >
-            {conversationState === "listening" && "Listening"}
-            {conversationState === "user_speaking" && "You are speaking"}
-            {conversationState === "assistant_thinking" && "Assistant thinking"}
-            {conversationState === "assistant_speaking" && "Assistant speaking"}
+            {(conversationState === "assistant_speaking" ||
+              conversationState === "user_speaking") && (
+              <div className="voice-wave" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            )}
+            <span>
+              {conversationState === "listening" && "Listening"}
+              {conversationState === "user_speaking" && "You are speaking"}
+              {conversationState === "assistant_thinking" && "Assistant thinking"}
+              {conversationState === "assistant_speaking" && "Assistant speaking"}
+            </span>
           </div>
         )}
       </div>
@@ -107,8 +117,14 @@ export function SessionStatus({
           <button
             type="button"
             onClick={onReconnect}
-            className="min-h-[44px] min-w-[44px] py-3 px-4 w-full font-bold text-white bg-blue-600 rounded-md text-sm"
-            style={{ minHeight: "44px", minWidth: "44px", width: "100%" }}
+            className="min-h-[44px] min-w-[44px] py-3 px-4 w-full font-bold text-white rounded-md text-sm shadow-md"
+            style={{
+              minHeight: "44px",
+              minWidth: "44px",
+              width: "100%",
+              borderRadius: "14px",
+              background: "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)",
+            }}
           >
             Reconnect Voice Session
           </button>

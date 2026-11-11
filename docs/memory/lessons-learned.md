@@ -307,6 +307,34 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Visualizer Audio Attachment Binding**:
   - When `page.tsx` attaches remote audio on response turn creation (`response.created`, `output_audio_buffer.started`, `response.output_item.added`), providing `attachRemoteFromAudioElement()` on `RealtimeAudioVisualizer` ensures seamless remote stream synchronization to the Web Audio `AnalyserNode`.
 
+---
+
+## 31. Mobile Safari Polish & State-Driven Screen Separation
+
+- **State-Driven Screen Separation**:
+  - In mobile viewports, having onboarding controls and active call status simultaneously visible can cause vertical scroll conflicts. Utilizing CSS selectors scoped to data attributes (`main[data-connection-state="connecting"] .ingestion-wrap`, `main[data-connection-state="reconnecting"] .ingestion-wrap { display: none; }` and `main[data-connection-state="idle"]:not([data-text-fallback="true"]) .transcript-wrap { display: none; }`) ensures completely uncluttered transitions between ingestion, connecting, and active voice sessions.
+- **Next.js Dev Indicator Isolation**:
+  - In development environments, Next.js renders portal toasts and error pills at the bottom corner (`nextjs-portal`, `[data-nextjs-toast]`, `[data-nextjs-dialog-overlay]`). These overlays intercept pointer events over bottom sticky docks on mobile Safari. Applying global hidden styling ensures mobile tap interactions remain unhindered.
+- **Single-Line Source Metadata & Sub-Pixel Dock Insets**:
+  - Formatting preview source titles as truncated single lines with flex row bullet separators prevents vertical wrapping shifts during mobile session initialization.
+  - Adding sub-pixel safe area padding in `.ios-dock` (`calc(0.5rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))`) ensures native-feeling spacing above the home indicator bar.
+
+---
+
+## 32. Flagship Polish: Segmented Picker, Dropzone Accessibility & Sonar Ripple Orb
+
+- **Accessible Segmented Tabs with Testing Library Compatibility**:
+  - Switching between ingestion methods (PDF upload vs. YouTube URL) with an iOS segmented control (`.apple-segmented`) must not break test suites that assert the presence of both inputs.
+  - By using `.tab-panel-inactive` with a `1px` clipping rect and `pointer-events: none` instead of `display: none` or unmounting, both input elements remain in the DOM and accessible to accessibility queries (`getByLabelText`) while being visually hidden to users until toggled.
+- **Tactile PDF Dropzone Replacement**:
+  - Browser-native `<input type="file">` controls display inconsistent, dated UI across platforms ("Choose file / No file chosen"). Overlyaing an opacity-zero file input (`.apple-dropzone-input`) over a custom tactile card (`.apple-dropzone`) delivers a modern iOS native feel while preserving standard file selection events.
+- **Concentric Sonar Ripple Animation**:
+  - Layering 3 concentric rings (`.apple-orb-ring-1`, `2`, `3`) around `.apple-voice-orb` with staggered CSS keyframe delays (`0s`, `0.8s`, `1.6s`) creates an expansive acoustic sonar effect during voice sessions that dynamically responds to `--orb-scale`.
+- **Reader Sheet & Voice Memory Gauge**:
+  - The expandable preview sheet provides immediate visibility into the AI's 48k character memory capacity with a dynamic gradient meter (`.apple-memory-bar-fill`) and human-friendly reading time estimate (`~X min read`).
+
+
+
 
 
 

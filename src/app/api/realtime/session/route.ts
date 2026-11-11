@@ -196,7 +196,7 @@ export async function POST(req: Request): Promise<Response> {
           : typeof process.env.OPENAI_REALTIME_VAD_SILENCE_MS === "string" &&
             !isNaN(parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10))
             ? parseInt(process.env.OPENAI_REALTIME_VAD_SILENCE_MS, 10)
-            : 600;
+            : 800;
 
   const vadPrefixPaddingMs =
     typeof clientVad?.prefix_padding_ms === "number"

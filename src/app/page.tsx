@@ -154,7 +154,6 @@ export default function Home(props: any) {
     };
   }, []);
 
-  // Visual Viewport iOS Keyboard Offset Tracking
   useEffect(() => {
     if (typeof window === "undefined" || !window.visualViewport) {
       return;
@@ -267,12 +266,10 @@ export default function Home(props: any) {
           playPromise !== undefined &&
           typeof playPromise.catch === "function"
         ) {
-          playPromise.catch((err: unknown) => {
-            console.error("Audio playback unlock error:", err);
-          });
+          playPromise.catch(() => {});
         }
-      } catch (err: unknown) {
-        console.error("Synchronous audio play unlock error:", err);
+      } catch {
+        // Ignore synchronous unlock error
       }
     }
 
@@ -424,21 +421,25 @@ export default function Home(props: any) {
   };
 
   const isConnected = connectionState === "connected";
-  const canStartVoiceChat = connectionState === "ready";
-  const showTranscriptArea =
+  const isCallView =
     isConnected ||
     connectionState === "connecting" ||
     connectionState === "reconnecting" ||
-    isTextFallback ||
+    isTextFallback;
+  const canStartVoiceChat = connectionState === "ready";
+  const showTranscriptArea =
+    isCallView ||
     transcript.length > 0 ||
     safeProps.initialTranscript !== undefined;
 
   return (
     <main
       ref={mainRef}
+      data-connection-state={connectionState}
       data-conversation-state={conversationState}
+      data-text-fallback={String(Boolean(isTextFallback))}
       className={`max-w-md mx-auto flex flex-col ${
-        isConnected || isTextFallback
+        isCallView
           ? "h-dvh max-h-dvh overflow-hidden"
           : "min-h-dvh overflow-x-hidden"
       }`}
@@ -451,21 +452,21 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Minimalist Borderless iOS Navigation Bar */}
+      {/* Minimalist Top Brand Bar */}
       <header
         className="apple-nav-bar shrink-0"
         style={{
           paddingTop:
-            "calc(0.65rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
+            "calc(0.5rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
         }}
       >
-        <div>
-          <h1 className="apple-nav-title">
-            Talk to a Document or YouTube Video
-          </h1>
-          <p className="sr-only">
-            Live voice conversations powered by OpenAI Realtime API
-          </p>
+        <div className="apple-brand-badge">
+          <span className="apple-brand-dot" aria-hidden="true" />
+          <span>TalkToMe Voice AI</span>
+        </div>
+        <div className="sr-only">
+          <h1>Talk to a Document or YouTube Video</h1>
+          <p>Live voice conversations powered by OpenAI Realtime API</p>
         </div>
       </header>
 
@@ -479,12 +480,21 @@ export default function Home(props: any) {
       {/* Main Content Area */}
       <div
         className={`flex-1 flex flex-col gap-3 px-4 py-2 ${
-          isConnected || isTextFallback
-            ? "min-h-0 overflow-hidden"
-            : "justify-center"
+          isCallView ? "min-h-0 overflow-hidden" : "justify-center"
         }`}
       >
-        <div className="flex flex-col gap-2.5 shrink-0">
+        <div className="flex flex-col gap-3 shrink-0">
+          {/* Editorial Hero Header on Home Screen */}
+          {!isCallView && (
+            <div className="apple-hero">
+              <p className="apple-hero-title">Speak with any source.</p>
+              <p className="apple-hero-subtitle">
+                Turn dense PDFs and YouTube videos into a natural, two-way voice
+                conversation.
+              </p>
+            </div>
+          )}
+
           {source && (
             <SourcePreview
               source={source}
@@ -496,13 +506,15 @@ export default function Home(props: any) {
           )}
 
           {!isConnected && (
-            <SourceIngestion
-              connectionState={connectionState}
-              canStartVoiceChat={canStartVoiceChat}
-              onPdfSelected={handlePdfSelected}
-              onYouTubeSubmit={handleYouTubeSubmit}
-              onStartVoiceChat={handleStartVoiceChat}
-            />
+            <div className="ingestion-wrap">
+              <SourceIngestion
+                connectionState={connectionState}
+                canStartVoiceChat={canStartVoiceChat}
+                onPdfSelected={handlePdfSelected}
+                onYouTubeSubmit={handleYouTubeSubmit}
+                onStartVoiceChat={handleStartVoiceChat}
+              />
+            </div>
           )}
 
           <SessionStatus
@@ -513,7 +525,7 @@ export default function Home(props: any) {
         </div>
 
         {showTranscriptArea && (
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className="transcript-wrap flex-1 min-h-0 flex flex-col">
             <ConversationTranscript
               transcript={transcript}
               conversationState={conversationState}

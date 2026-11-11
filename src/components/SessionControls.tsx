@@ -68,6 +68,38 @@ export function SessionControls({
               }`}
               style={{ minHeight: "44px", minWidth: "44px" }}
             >
+              {isMuted ? (
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                  <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+                </svg>
+              ) : (
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                </svg>
+              )}
               <span>{isMuted ? "Unmute" : "Mute"}</span>
             </button>
           )}
@@ -79,6 +111,15 @@ export function SessionControls({
               className="dock-pill-btn dock-pill-interrupt min-h-[44px] min-w-[44px]"
               style={{ minHeight: "44px", minWidth: "44px" }}
             >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2.5" />
+              </svg>
               <span>Interrupt</span>
             </button>
           )}
@@ -89,6 +130,20 @@ export function SessionControls({
             className="dock-pill-btn dock-pill-end min-h-[44px] min-w-[44px]"
             style={{ minHeight: "44px", minWidth: "44px" }}
           >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
             <span>End Call</span>
           </button>
         </div>
@@ -113,7 +168,7 @@ export function SessionControls({
                 ? "ios-send-btn-active"
                 : "ios-send-btn-disabled"
             }`}
-            style={{ minHeight: "38px", minWidth: "60px" }}
+            style={{ minHeight: "36px", minWidth: "60px" }}
           >
             <span>Send</span>
           </button>

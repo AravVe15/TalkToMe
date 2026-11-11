@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import type {
   RealtimeConnectionState,
   RealtimeConversationState,
@@ -23,16 +23,35 @@ export function SessionStatus({
   const isError = connectionState === "error";
   const showOrb = isConnected || isConnecting || isReconnecting;
 
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!isConnected) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isConnected]);
+
+  const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
+  const secs = String(elapsedSeconds % 60).padStart(2, "0");
+
   return (
     <div className="apple-status-strip">
-      {/* Clean Apple / ChatGPT Breathing Voice Circle (Only during active/connecting session) */}
+      {/* Concentric Sonar Ripple Voice Orb */}
       {showOrb && (
         <div className="apple-voice-orb-wrap" aria-hidden="true">
+          <div className="apple-orb-ring apple-orb-ring-1" />
+          <div className="apple-orb-ring apple-orb-ring-2" />
+          <div className="apple-orb-ring apple-orb-ring-3" />
           <div className="apple-voice-orb" data-state={conversationState} />
         </div>
       )}
 
-      {/* Minimalist Borderless Status Pill Row */}
+      {/* Status + Live Call Duration Timer Row */}
       <div className="flex items-center justify-center gap-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full">
           <span
@@ -67,6 +86,12 @@ export function SessionStatus({
             {connectionState === "ingesting" && "Ingesting..."}
           </span>
         </div>
+
+        {isConnected && (
+          <span className="apple-call-timer" aria-hidden="true">
+            {`${mins}:${secs}`}
+          </span>
+        )}
 
         {isConnected && (
           <div

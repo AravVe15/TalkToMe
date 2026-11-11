@@ -53,7 +53,7 @@ export const CALIBRATED_SERVER_VAD_CONFIG: ServerVadConfig = {
   type: "server_vad",
   threshold: 0.8,
   prefix_padding_ms: 300,
-  silence_duration_ms: 600,
+  silence_duration_ms: 800,
   create_response: true,
   interrupt_response: true,
 };

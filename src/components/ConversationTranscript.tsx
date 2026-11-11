@@ -78,7 +78,7 @@ function VoicePacedText({
   return (
     <p
       className="whitespace-pre-wrap break-words leading-relaxed"
-      style={{ margin: 0, fontSize: "15px", lineHeight: 1.5 }}
+      style={{ margin: 0, fontSize: "15px", lineHeight: 1.45 }}
     >
       <span>{visibleText}</span>
       {typeof process !== "undefined" &&
@@ -189,25 +189,15 @@ export function ConversationTranscript({
         return (
           <div
             key={item.id}
-            className={`flex flex-col gap-1 text-sm ${
+            className={`flex flex-col gap-0.5 text-sm ${
               isUser ? "bubble-user" : "bubble-assistant"
             }`}
           >
-            <div
-              className="flex items-center justify-between gap-2 text-xs font-semibold"
-              style={{
-                opacity: isUser ? 0.85 : 0.55,
-                fontSize: "11px",
-              }}
-            >
-              <span>{isUser ? "You" : "Assistant"}</span>
-              {isInterrupted && (
-                <span className="italic text-xs">[Interrupted]</span>
-              )}
-            </div>
+            {/* Keep role label in DOM for accessibility & unit tests without cluttering iMessage bubble */}
+            <span className="sr-only">{isUser ? "You" : "Assistant"}</span>
 
             {isTranscribing ? (
-              <div className="flex items-center gap-2 italic text-xs py-1">
+              <div className="flex items-center gap-2 italic text-xs py-0.5">
                 <div className="voice-wave" aria-hidden="true">
                   <span />
                   <span />
@@ -222,6 +212,15 @@ export function ConversationTranscript({
                 status={item.status}
                 onWordReveal={scrollToBottom}
               />
+            )}
+
+            {isInterrupted && (
+              <span
+                className="italic text-xs"
+                style={{ opacity: 0.55, fontSize: "11px" }}
+              >
+                [Interrupted]
+              </span>
             )}
           </div>
         );

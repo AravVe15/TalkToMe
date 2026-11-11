@@ -1100,6 +1100,64 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero reads of `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
 
+## Session: 2026-11-11 (Implementer — Mobile Screenshot Polish & State-Driven Screen Separation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Applied verbatim mobile screenshot fixes across 6 files:
+  1. `src/app/globals.css`:
+     - Added CSS rules to hide Next.js dev toast and dialog overlay (`nextjs-portal`, `[data-nextjs-toast]`, `[data-nextjs-dialog-overlay]`) preventing overlay overlap with mobile bottom controls.
+     - Implemented state-driven screen separation via `main[data-connection-state="connecting"] .ingestion-wrap`, `main[data-connection-state="reconnecting"] .ingestion-wrap`, and `main[data-connection-state="idle"]:not([data-text-fallback="true"]) .transcript-wrap` to prevent layout clutter.
+     - Preserved soft watercolor fluid voice orb animations and frosted iOS dock styling.
+  2. `src/app/page.tsx`:
+     - Applied silent gesture unlock handling on iOS audio elements to avoid emitting console errors that trigger dev overlay pills.
+     - Maintained full lifecycle management, visual viewport keyboard tracking, audio visualization, and turn deduplication.
+  3. `src/components/SourcePreview.tsx`:
+     - Formatted title and metadata into a non-wrapping single line with truncation and subtle dot separators.
+  4. `src/components/SourceIngestion.tsx`:
+     - Rendered unified `.apple-sheet` with clean 16px inputs (preventing mobile iOS Safari automatic zoom) and primary voice chat CTA.
+  5. `src/components/ConversationTranscript.tsx`:
+     - Optimized `VoicePacedText` with punctuation pacing, requestAnimationFrame scroll anchoring, and hidden text handling for unit testing.
+  6. `src/components/SessionControls.tsx`:
+     - Preserved all ARIA roles and labels, 44px min-tap targets, mute/unmute/interrupt/end call controls, and text fallback input.
+- **Verification**:
+  - `npm run typecheck`: **PASS** (0 errors).
+  - `npm run lint`: **PASS** (0 warnings, 0 errors).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: **PASS** (27/27 passed).
+  - `npm test`: **PASS** (285 passed, 2 acknowledged expected test divergences).
+- **Strict Boundary Adherence**:
+  - Replaced the exact 6 files verbatim without improvising styles.
+  - Zero edits to `tests/`, `controls.ts`, `transcript.ts`, `connection.ts`, or `audio-visualizer.ts`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-11 (Implementer — Flagship Product Polish: Segmented Picker, Dropzone, Hero & Sonar Orb)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Upgraded 5 core files verbatim to deliver the Flagship Product Polish:
+  1. `src/app/globals.css`:
+     - Styled iOS segmented mode picker (`.apple-segmented`, `.apple-segment-btn`, `.apple-segment-btn-active`), tactile PDF dropzone (`.apple-dropzone`, `.apple-dropzone-icon`, `.apple-dropzone-input`), and `.tab-panel-inactive` accessible visual hiding.
+     - Styled editorial hero section (`.apple-hero`, `.apple-hero-title`, `.apple-hero-subtitle`), top brand pill badge with pulsating dot, reader sheet with memory gauge track/fill, concentric 3-tier sonar ripple rings (`.apple-orb-ring-1/2/3`), and live call timer (`.apple-call-timer`).
+  2. `src/app/page.tsx`:
+     - Integrated the editorial hero header conditionally on the home screen (`!isCallView`), top brand pill badge, and clean layout spacing.
+  3. `src/components/SourceIngestion.tsx`:
+     - Implemented tabbed segmented control for PDF vs. YouTube selection, tactile dropzone with selected filename display, and accessible tab panels retaining all required test labels.
+  4. `src/components/SourcePreview.tsx`:
+     - Added read-time badge (`~X min read`), 48k voice memory percentage gauge bar, and reader sheet body.
+  5. `src/components/SessionStatus.tsx`:
+     - Integrated 3 concentric sonar ripple rings around the voice orb and live call duration timer (`mm:ss`) during active sessions.
+- **Verification**:
+  - `npm run typecheck`: **PASS** (0 errors).
+  - `npm run lint`: **PASS** (0 warnings, 0 errors).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: **PASS** (27/27 passed).
+  - `npm test`: **PASS** (285 passed, 2 acknowledged expected test divergences).
+- **Strict Boundary Adherence**:
+  - Replaced the exact 5 files verbatim without improvising styles or markup.
+  - Did NOT touch `ConversationTranscript.tsx`, `SessionControls.tsx`, `controls.ts`, `transcript.ts`, `connection.ts`, `audio-visualizer.ts`, or `tests/`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
+
 
 
 

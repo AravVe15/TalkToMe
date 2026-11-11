@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import type {
   RealtimeConnectionState,
   RealtimeConversationState,
@@ -31,6 +31,7 @@ export function SessionControls({
   onSendText,
 }: SessionControlsProps) {
   const [inputText, setInputText] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const isConnected = connectionState === "connected";
   const showTextFallbackBanner = isTextFallback || micStatus === "unavailable";
   const isAssistantSpeaking = conversationState === "assistant_speaking";
@@ -42,6 +43,8 @@ export function SessionControls({
     if (trimmed && onSendText) {
       onSendText(trimmed);
       setInputText("");
+      // Dismiss iOS software keyboard consistently when message is sent
+      inputRef.current?.blur();
     }
   };
 
@@ -152,6 +155,7 @@ export function SessionControls({
       {(isTextFallback || isConnected) && (
         <form onSubmit={handleSubmit} className="ios-input-pill">
           <input
+            ref={inputRef}
             type="text"
             aria-label="Message text"
             value={inputText}

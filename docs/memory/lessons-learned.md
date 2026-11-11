@@ -361,6 +361,23 @@ This document captures operational gotchas, environment quirks, and technical in
     - `user_speaking` / `assistant_speaking`: Dynamic audio-reactive scale.
   - Contextual stage headlines ("Voice Assistant Standby", "Reading Your Source...", "Source Loaded in Memory") replace static landing page text.
 
+---
+
+## 35. iOS Keyboard Gap Resizing, WebKit Orb Compositing & Top-Pinned Source Context
+
+- **True VisualViewport Resizing vs. `translateY` Offsets**:
+  - Translating the bottom dock with `translateY(-${keyboardOffset}px)` often creates phantom gaps and detached blank spaces on iOS Safari due to decoupled window scroll coordinates.
+  - Subscribing directly to `window.visualViewport` `resize` and `scroll` events to dynamically constrain the root container's height (`el.style.height = `${vv.height}px``, `el.style.maxHeight = `${vv.height}px``) when `keyboardHeight > 60` locks the sticky dock squarely against the keyboard with zero gap.
+  - Scrolling the transcript container (`feed.scrollTop = feed.scrollHeight`) concurrently guarantees that recent conversation turns remain pinned directly above the text input bar when typing.
+- **WebKit Hardware Layer Compositing & Frame-0 Drop Elimination**:
+  - WebKit frequently drops or fails to composite animated pseudo-elements using `filter: blur(...)` combined with negative `z-index`, causing elements like voice orbs to intermittently vanish.
+  - Enforcing immediate hardware acceleration (`translate3d(0, 0, 0)`, `backface-visibility: hidden`, `will-change: transform`) and utilizing layered CSS drop-shadows instead of blurred pseudo-elements preserves continuous rendering of the voice orb and ripple rings.
+- **Top-Anchored Source Preview & Ergonomics**:
+  - Anchoring `.apple-top-source-bar` immediately below the sticky header prevents loaded document context from shifting into middle-screen dead zones, maintaining a structured two-zone hierarchy (Top: Source Context & Living Stage; Bottom: Transcript Feed & Input Dock).
+- **Post-Send Keyboard Dismissal**:
+  - Explicitly calling `inputRef.current?.blur()` on message submit dismisses the iOS software keyboard, immediately restoring the full viewport stage for audio conversation.
+
+
 
 
 

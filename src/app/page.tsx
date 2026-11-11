@@ -154,18 +154,31 @@ export default function Home(props: any) {
     };
   }, []);
 
+  // True iOS Safari VisualViewport Container Resizing (Zero phantom gap under text bar)
   useEffect(() => {
     if (typeof window === "undefined" || !window.visualViewport) {
       return;
     }
     const vv = window.visualViewport;
     const handleViewportChange = () => {
-      if (!mainRef.current) return;
-      const offset = Math.max(
-        0,
-        window.innerHeight - (vv.height + vv.offsetTop)
-      );
-      mainRef.current.style.setProperty("--keyboard-offset", `${offset}px`);
+      const el = mainRef.current;
+      if (!el) return;
+      const keyboardHeight = window.innerHeight - vv.height;
+      if (keyboardHeight > 60) {
+        el.setAttribute("data-keyboard-open", "true");
+        el.style.height = `${vv.height}px`;
+        el.style.maxHeight = `${vv.height}px`;
+        window.scrollTo(0, 0);
+      } else {
+        el.setAttribute("data-keyboard-open", "false");
+        el.style.height = "";
+        el.style.maxHeight = "";
+      }
+      // Keep transcript pinned right above the text input bar when keyboard opens
+      const feed = el.querySelector(".transcript-feed");
+      if (feed) {
+        feed.scrollTop = feed.scrollHeight;
+      }
     };
     vv.addEventListener("resize", handleViewportChange);
     vv.addEventListener("scroll", handleViewportChange);
@@ -494,15 +507,9 @@ export default function Home(props: any) {
         </div>
       )}
 
-      {/* ZONE 1: THE LIVING VOICE STAGE (Upper Viewport) */}
-      <div className="apple-upper-stage">
-        <SessionStatus
-          connectionState={connectionState}
-          conversationState={conversationState}
-          onReconnect={handleStartVoiceChat}
-        />
-
-        {source && (
+      {/* TOP-PINNED SOURCE CONTEXT BAR (Always anchored right below header!) */}
+      {source && (
+        <div className="apple-top-source-bar">
           <SourcePreview
             source={source}
             expanded={isPreviewExpanded}
@@ -510,10 +517,19 @@ export default function Home(props: any) {
               setPreviewExpandedState(!isPreviewExpanded)
             }
           />
-        )}
+        </div>
+      )}
+
+      {/* ZONE 1: THE LIVING VOICE STAGE */}
+      <div className="apple-upper-stage">
+        <SessionStatus
+          connectionState={connectionState}
+          conversationState={conversationState}
+          onReconnect={handleStartVoiceChat}
+        />
       </div>
 
-      {/* Live Conversation Transcript (Expands between Stage and Dock during Call) */}
+      {/* Live Conversation Transcript (Sits directly above the text input bar) */}
       {showTranscriptArea && (
         <div className="transcript-wrap flex-1 min-h-0 flex flex-col px-4">
           <ConversationTranscript

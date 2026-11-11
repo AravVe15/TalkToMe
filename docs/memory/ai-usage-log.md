@@ -49,6 +49,8 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-10 | Iconographic Pill Controls & iMessage-Style Input | Implementer | Gemini 3.8 Flash (High) | Replaced `SessionControls.tsx` with rounded pill buttons containing crisp SVGs and semantic text spans, paired with an iMessage-style rounded pill input bar. | `read_file`, `write_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/components/SessionControls.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
 | 2026-11-10 | iOS 18 Micro-Interactions & Form Polish | Implementer | Gemini 3.8 Flash (High) | Polished inner elements across `SessionStatus.tsx` (voice-wave speaking badges, gradient reconnect), `SourcePreview.tsx` (pill disclosure button, 180px preview box), and `SourceIngestion.tsx` (rounded input borders, gradient CTAs). | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, `src/components/SourceIngestion.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
 | 2026-11-10 | Comprehensive Architectural & Technical Audit | Reviewer | Gemini 3.8 Flash (High) | Conducted comprehensive, read-only architectural audit and verification (`typecheck`, `lint`, and full test suite analysis); audited security and secret isolation; analyzed 4 unit test divergences stemming from recent AEC, VAD, model, and UI upgrades; generated full Project Scope & Architecture Summary. | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npm test`, `git status`, `git log`) | Updated `docs/memory/ai-usage-log.md`; formulated comprehensive 8-section Project Scope & Architecture Summary. |
+| 2026-11-11 | iOS Keyboard Gap, WebKit Orb Compositing & Top-Pinned SourcePreview | Implementer | Gemini 3.8 Flash (High) | Applied verbatim patch to globals.css, page.tsx, and SessionControls.tsx to eliminate the iOS keyboard gap with VisualViewport container sizing, fix WebKit orb drops with hardware layer compositing, anchor source preview below header, and blur input on submit. Verified typecheck, lint, and all 27 UI tests pass. | `write_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npm test`, `npx vitest`) | Updated `src/app/globals.css`, `src/app/page.tsx`, `src/components/SessionControls.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
 
@@ -1207,6 +1209,34 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero edits to `tests/` or backend/realtime library files.
   - Zero reads or access to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-11 (Implementer — Fix iOS Keyboard Gap, WebKit Orb Disappearing Bug & Top-Pinned SourcePreview)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Replaced the exact contents of 3 files verbatim per user request:
+  1. `src/app/globals.css`:
+     - Cleaned up Next.js dev overlay rules.
+     - Added GPU-safe hardware compositing for `.apple-voice-orb-wrap` (`translate3d(0, 0, 0)`, `backface-visibility: hidden`, `will-change: transform`).
+     - Removed negative z-index blur pseudo-elements from `.apple-voice-orb` that iOS WebKit dropped on frame 0.
+     - Added `.apple-top-source-bar` styling for top-anchored document context.
+     - Scoped keyboard open styling to `main[data-keyboard-open="true"]`.
+  2. `src/app/page.tsx`:
+     - Replaced `translateY` offset with true `window.visualViewport` dynamic height resizing (`style.height = `${vv.height}px``, `style.maxHeight = `${vv.height}px``) when keyboard opens (>60px), setting `data-keyboard-open="true"`.
+     - Automatically scrolled conversation transcript to bottom when keyboard opens.
+     - Anchored `SourcePreview` inside `.apple-top-source-bar` directly below the header.
+  3. `src/components/SessionControls.tsx`:
+     - Added `inputRef.current?.blur()` on submit to dismiss the iOS software keyboard consistently upon sending a message.
+- **Verification**:
+  - `npm run typecheck`: **PASS** (0 errors).
+  - `npm run lint`: **PASS** (0 warnings, 0 errors).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: **PASS** (27/27 UI tests passed).
+  - `npm test`: **PASS** (285 passed across 14 suites; 2 known prior test fixture divergence assertions unchanged).
+- **Strict Boundary Adherence**:
+  - Replaced the exact 3 files verbatim.
+  - Zero edits to `tests/` or any other files.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
 
 
 

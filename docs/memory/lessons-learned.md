@@ -346,6 +346,22 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Native Files Action Row vs. Dashed Web Dropzone**:
   - Dashed borders are characteristic of legacy web upload forms. Replacing them with a solid rounded squircle row (`.apple-file-row`), document glyph icon, primary/secondary text labels, and an iOS pill badge ("Browse" / "Change") provides an authentic Apple Files app aesthetic.
 
+---
+
+## 34. Two-Zone Native iOS Spatial Layout: Living Voice Stage & Bottom Drawer
+
+- **Two-Zone Spatial Separation (Hero Stage vs. Thumb Sheet)**:
+  - Consolidating interactive forms into a bottom-docked drawer (`.apple-bottom-sheet-wrap`, `.apple-sheet`) grounded near the thumb zone with an iOS sheet grabber (`.apple-sheet-grabber`) mirrors native iOS system sheets (Maps, Apple Music, Share Sheets).
+  - Dedicating the upper viewport to an always-living voice stage (`.apple-upper-stage`) with the concentric sonar ripple orb provides an immediate visual focal point.
+- **Always-Alive Voice Orb States**:
+  - Rather than hiding the orb until connection is established, the orb remains active across all lifecycle states:
+    - `idle`: Breathing sky blue (`#bae6fd` -> `#007aff`).
+    - `ingesting`: Fast pulsating indigo/violet (`#c4b5fd` -> `#6366f1`).
+    - `ready`: Bright emerald/cyan (`#a7f3d0` -> `#38bdf8`).
+    - `user_speaking` / `assistant_speaking`: Dynamic audio-reactive scale.
+  - Contextual stage headlines ("Voice Assistant Standby", "Reading Your Source...", "Source Loaded in Memory") replace static landing page text.
+
+
 
 
 

@@ -18,14 +18,8 @@ export function SessionStatus({
   onReconnect,
 }: SessionStatusProps) {
   const isConnected = connectionState === "connected";
-  const isConnecting = connectionState === "connecting";
   const isReconnecting = connectionState === "reconnecting";
   const isError = connectionState === "error";
-  const showOrb = isConnected || isConnecting || isReconnecting;
-  const isPreCallState =
-    connectionState === "idle" ||
-    connectionState === "ingesting" ||
-    connectionState === "ready";
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -43,33 +37,46 @@ export function SessionStatus({
   const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
   const secs = String(elapsedSeconds % 60).padStart(2, "0");
 
-  // During Idle / Ingesting / Ready, hide the redundant debug status dot visually
-  // while keeping the exact text in the DOM for unit tests.
-  if (isPreCallState) {
-    return (
-      <div className="sr-only">
-        <span>
-          {connectionState === "ready" && "Ready"}
-          {connectionState === "idle" && "Idle"}
-          {connectionState === "ingesting" && "Ingesting..."}
-        </span>
-      </div>
-    );
-  }
+  const visualOrbState = isConnected ? conversationState : connectionState;
 
   return (
     <div className="apple-status-strip">
-      {showOrb && (
-        <div className="apple-voice-orb-wrap" aria-hidden="true">
-          <div className="apple-orb-ring apple-orb-ring-1" />
-          <div className="apple-orb-ring apple-orb-ring-2" />
-          <div className="apple-orb-ring apple-orb-ring-3" />
-          <div className="apple-voice-orb" data-state={conversationState} />
+      {/* Always-Alive Voice Orb on the Upper Stage */}
+      <div className="apple-voice-orb-wrap" aria-hidden="true">
+        <div className="apple-orb-ring apple-orb-ring-1" />
+        <div className="apple-orb-ring apple-orb-ring-2" />
+        <div className="apple-orb-ring apple-orb-ring-3" />
+        <div className="apple-voice-orb" data-state={visualOrbState} />
+      </div>
+
+      {/* Contextual Stage Headline (Pre-Call vs In-Call) */}
+      {!isConnected && (
+        <div className="flex flex-col items-center gap-0.5">
+          <p className="apple-stage-headline">
+            {connectionState === "idle" && "Voice Assistant Standby"}
+            {connectionState === "ingesting" && "Reading Your Source..."}
+            {connectionState === "ready" && "Source Loaded in Memory"}
+            {connectionState === "connecting" && "Starting Voice Session..."}
+            {connectionState === "reconnecting" && "Reconnecting Audio..."}
+            {connectionState === "error" && "Session Interrupted"}
+          </p>
+          <p className="apple-stage-subline">
+            {connectionState === "idle" &&
+              "Select a PDF document or paste a YouTube video below to talk through it."}
+            {connectionState === "ingesting" &&
+              "Extracting full text and preparing direct context grounding."}
+            {connectionState === "ready" &&
+              "Tap Start Voice Chat below to ask questions out loud."}
+          </p>
         </div>
       )}
 
+      {/* Status + Live Call Duration Timer Row */}
       <div className="flex items-center justify-center gap-2">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full">
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full"
+          style={{ background: "rgba(255, 255, 255, 0.75)" }}
+        >
           <span
             className="inline-block rounded-full"
             style={{
@@ -77,13 +84,16 @@ export function SessionStatus({
               height: "7px",
               borderRadius: "50%",
               backgroundColor:
-                connectionState === "connected"
+                connectionState === "connected" || connectionState === "ready"
                   ? "#34c759"
-                  : connectionState === "connecting"
+                  : connectionState === "connecting" ||
+                      connectionState === "ingesting"
                     ? "#007aff"
                     : connectionState === "reconnecting"
                       ? "#ff9500"
-                      : "#ff3b30",
+                      : connectionState === "error"
+                        ? "#ff3b30"
+                        : "#86868b",
             }}
           />
           <span
@@ -95,6 +105,9 @@ export function SessionStatus({
             {connectionState === "reconnecting" &&
               "Reconnecting (Unstable network)..."}
             {connectionState === "error" && "Connection Error (Failed)"}
+            {connectionState === "ready" && "Ready"}
+            {connectionState === "idle" && "Idle"}
+            {connectionState === "ingesting" && "Ingesting..."}
           </span>
         </div>
 
@@ -108,7 +121,7 @@ export function SessionStatus({
           <div
             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
             style={{
-              backgroundColor: "rgba(0, 122, 255, 0.08)",
+              backgroundColor: "rgba(0, 122, 255, 0.1)",
               color: "#007aff",
               fontSize: "12px",
             }}

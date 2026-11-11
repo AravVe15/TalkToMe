@@ -40,6 +40,8 @@ export function SourceIngestion({
 
   return (
     <div className="apple-sheet">
+      {/* Native iOS Sheet Grabber Handle */}
+      <div className="apple-sheet-grabber" aria-hidden="true" />
       <span className="sr-only">Choose a Source</span>
 
       {/* iOS Segmented Mode Picker */}
@@ -49,9 +51,8 @@ export function SourceIngestion({
           role="tab"
           aria-selected={activeTab === "pdf"}
           onClick={() => setActiveTab("pdf")}
-          className={`apple-segment-btn ${
-            activeTab === "pdf" ? "apple-segment-btn-active" : ""
-          }`}
+          className={`apple-segment-btn ${activeTab === "pdf" ? "apple-segment-btn-active" : ""
+            }`}
         >
           <svg
             width="14"
@@ -75,9 +76,8 @@ export function SourceIngestion({
           role="tab"
           aria-selected={activeTab === "youtube"}
           onClick={() => setActiveTab("youtube")}
-          className={`apple-segment-btn ${
-            activeTab === "youtube" ? "apple-segment-btn-active" : ""
-          }`}
+          className={`apple-segment-btn ${activeTab === "youtube" ? "apple-segment-btn-active" : ""
+            }`}
         >
           <svg
             width="14"
@@ -92,7 +92,7 @@ export function SourceIngestion({
         </button>
       </div>
 
-      {/* Tab 1: Native iOS Files Action Row (No dashed border, no visible native file input) */}
+      {/* Tab 1: Native iOS Files Action Row */}
       <div className={activeTab === "pdf" ? "" : "tab-panel-inactive"}>
         <label htmlFor="pdf-upload" className="sr-only">
           Upload PDF Document
@@ -135,7 +135,7 @@ export function SourceIngestion({
             >
               {selectedFileName
                 ? "Tap to choose a different PDF"
-                : "Up to 25 MB • iOS Files or iCloud Drive"}
+                : "Up to 25 MB"}
             </span>
           </div>
           <span className="apple-file-row-badge" aria-hidden="true">
@@ -196,7 +196,7 @@ export function SourceIngestion({
         disabled={!canStartVoiceChat}
         onClick={onStartVoiceChat}
         className="apple-primary-btn min-h-[44px] min-w-[44px]"
-        style={{ minHeight: "50px", minWidth: "44px" }}
+        style={{ minHeight: "52px", minWidth: "44px" }}
       >
         <svg
           width="17"

@@ -438,7 +438,7 @@ export default function Home(props: any) {
       data-connection-state={connectionState}
       data-conversation-state={conversationState}
       data-text-fallback={String(Boolean(isTextFallback))}
-      className={`max-w-md mx-auto flex flex-col ${
+      className={`apple-spatial-shell max-w-md mx-auto flex flex-col ${
         isCallView
           ? "h-dvh max-h-dvh overflow-hidden"
           : "min-h-dvh overflow-x-hidden"
@@ -452,7 +452,7 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Native iOS App Header (No Marketing Slogan) */}
+      {/* Native iOS Top Bar */}
       <header
         className="apple-nav-bar shrink-0"
         style={{
@@ -463,8 +463,8 @@ export default function Home(props: any) {
         <div className="apple-app-title">
           <span className="apple-app-logo" aria-hidden="true">
             <svg
-              width="13"
-              height="13"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -494,52 +494,49 @@ export default function Home(props: any) {
         </div>
       )}
 
-      {/* Main Content Area */}
-      <div
-        className={`flex-1 flex flex-col gap-3 px-4 py-2 ${
-          isCallView ? "min-h-0 overflow-hidden" : "justify-center"
-        }`}
-      >
-        <div className="flex flex-col gap-3 shrink-0">
-          {source && (
-            <SourcePreview
-              source={source}
-              expanded={isPreviewExpanded}
-              onToggleExpanded={() =>
-                setPreviewExpandedState(!isPreviewExpanded)
-              }
-            />
-          )}
+      {/* ZONE 1: THE LIVING VOICE STAGE (Upper Viewport) */}
+      <div className="apple-upper-stage">
+        <SessionStatus
+          connectionState={connectionState}
+          conversationState={conversationState}
+          onReconnect={handleStartVoiceChat}
+        />
 
-          {!isConnected && (
-            <div className="ingestion-wrap">
-              <SourceIngestion
-                connectionState={connectionState}
-                canStartVoiceChat={canStartVoiceChat}
-                onPdfSelected={handlePdfSelected}
-                onYouTubeSubmit={handleYouTubeSubmit}
-                onStartVoiceChat={handleStartVoiceChat}
-              />
-            </div>
-          )}
-
-          <SessionStatus
-            connectionState={connectionState}
-            conversationState={conversationState}
-            onReconnect={handleStartVoiceChat}
+        {source && (
+          <SourcePreview
+            source={source}
+            expanded={isPreviewExpanded}
+            onToggleExpanded={() =>
+              setPreviewExpandedState(!isPreviewExpanded)
+            }
           />
-        </div>
-
-        {showTranscriptArea && (
-          <div className="transcript-wrap flex-1 min-h-0 flex flex-col">
-            <ConversationTranscript
-              transcript={transcript}
-              conversationState={conversationState}
-            />
-          </div>
         )}
       </div>
 
+      {/* Live Conversation Transcript (Expands between Stage and Dock during Call) */}
+      {showTranscriptArea && (
+        <div className="transcript-wrap flex-1 min-h-0 flex flex-col px-4">
+          <ConversationTranscript
+            transcript={transcript}
+            conversationState={conversationState}
+          />
+        </div>
+      )}
+
+      {/* ZONE 2: GROUNDED iOS BOTTOM SHEET (Pre-Call Thumb Zone) */}
+      {!isConnected && (
+        <div className="ingestion-wrap apple-bottom-sheet-wrap shrink-0">
+          <SourceIngestion
+            connectionState={connectionState}
+            canStartVoiceChat={canStartVoiceChat}
+            onPdfSelected={handlePdfSelected}
+            onYouTubeSubmit={handleYouTubeSubmit}
+            onStartVoiceChat={handleStartVoiceChat}
+          />
+        </div>
+      )}
+
+      {/* Active Call Bottom Dock */}
       <SessionControls
         connectionState={connectionState}
         conversationState={conversationState}

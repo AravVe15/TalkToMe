@@ -22,8 +22,6 @@ function VoicePacedText({
   status,
   onWordReveal,
 }: VoicePacedTextProps) {
-  // If mounted already completed with full text (e.g., initial history), show immediately;
-  // if mounted empty/streaming/transcribing, reveal progressively word-by-word.
   const startedStreamingRef = useRef<boolean>(
     status === "streaming" || status === "transcribing" || text.length === 0
   );
@@ -48,23 +46,23 @@ function VoicePacedText({
       return;
     }
 
-
-    // Natural human voice cadence (~260ms per word for assistant, ~140ms for user)
-    // Plus a slight pause on punctuation (commas/periods/em-dashes) so it breathes with the voice!
+    const isCompleted = status === "completed";
     const currentSlice = text.slice(0, revealedLen);
     const endsWithPunctuation = /[.,!?;:—-]\s*$/.test(currentSlice);
-    const baseMs = role === "assistant" ? 220 : 140;
-    const stepMs = endsWithPunctuation ? baseMs + 180 : baseMs;
+    const baseMs = isCompleted ? 35 : role === "assistant" ? 110 : 75;
+    const stepMs =
+      !isCompleted && endsWithPunctuation ? baseMs + 85 : baseMs;
 
     const timer = setTimeout(() => {
       setRevealedLen((prev) => {
         if (prev >= text.length) return text.length;
-        // Advance to the end of the next word (including trailing whitespace)
         const remaining = text.slice(prev);
+        if (isCompleted && remaining.length > 80) {
+          return text.length;
+        }
         const match = remaining.match(/^\S+\s*/);
-        const step = match ? match[0].length : Math.min(6, remaining.length);
-        const next = Math.min(text.length, prev + Math.max(1, step));
-        return next;
+        const step = match ? match[0].length : Math.min(8, remaining.length);
+        return Math.min(text.length, prev + Math.max(1, step));
       });
       onWordReveal?.();
     }, stepMs);
@@ -80,7 +78,7 @@ function VoicePacedText({
   return (
     <p
       className="whitespace-pre-wrap break-words leading-relaxed"
-      style={{ margin: 0, fontSize: "14px", lineHeight: 1.55 }}
+      style={{ margin: 0, fontSize: "15px", lineHeight: 1.5 }}
     >
       <span>{visibleText}</span>
       {typeof process !== "undefined" &&
@@ -99,6 +97,7 @@ export function ConversationTranscript({
 }: ConversationTranscriptProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   const lastItemText =
     transcript && transcript.length > 0
@@ -108,17 +107,27 @@ export function ConversationTranscript({
   const scrollToBottom = React.useCallback(() => {
     const el = containerRef.current;
     if (el) {
-      try {
-        el.scrollTo({
-          top: el.scrollHeight,
-          behavior: "auto",
+      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        if (rafRef.current !== null) {
+          window.cancelAnimationFrame(rafRef.current);
+        }
+        rafRef.current = window.requestAnimationFrame(() => {
+          rafRef.current = null;
+          try {
+            el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+          } catch {
+            el.scrollTop = el.scrollHeight;
+          }
         });
-      } catch {
-        el.scrollTop = el.scrollHeight;
+      } else {
+        try {
+          el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+        } catch {
+          el.scrollTop = el.scrollHeight;
+        }
       }
       return;
     }
-    // Fallback only for unit test environments where scrollTo/scrollTop isn't used
     if (
       typeof process !== "undefined" &&
       process.env?.NODE_ENV === "test" &&
@@ -134,6 +143,18 @@ export function ConversationTranscript({
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (
+        rafRef.current !== null &&
+        typeof window !== "undefined" &&
+        window.cancelAnimationFrame
+      ) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (transcript && transcript.length > 0) {
       scrollToBottom();
     }
@@ -141,27 +162,13 @@ export function ConversationTranscript({
 
   if (!transcript || transcript.length === 0) {
     return (
-      <div
-        className="transcript-feed items-center justify-center text-center"
-        style={{ minHeight: "140px" }}
-      >
-        <div className="flex flex-col items-center gap-2 p-4">
-          <div
-            className="voice-wave"
-            style={{ color: "#3b82f6" }}
-            aria-hidden="true"
-          >
-            <span />
-            <span />
-            <span />
-          </div>
-          <span
-            className="text-xs font-medium"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Conversation transcript will appear here when you speak.
-          </span>
-        </div>
+      <div className="transcript-feed items-center justify-center text-center">
+        <span
+          className="text-xs font-medium"
+          style={{ color: "#86868b", fontSize: "13px" }}
+        >
+          Conversation transcript will appear here when you speak.
+        </span>
       </div>
     );
   }
@@ -186,10 +193,16 @@ export function ConversationTranscript({
               isUser ? "bubble-user" : "bubble-assistant"
             }`}
           >
-            <div className="flex items-center justify-between gap-2 text-xs font-semibold opacity-80">
+            <div
+              className="flex items-center justify-between gap-2 text-xs font-semibold"
+              style={{
+                opacity: isUser ? 0.85 : 0.55,
+                fontSize: "11px",
+              }}
+            >
               <span>{isUser ? "You" : "Assistant"}</span>
               {isInterrupted && (
-                <span className="italic text-xs opacity-70">[Interrupted]</span>
+                <span className="italic text-xs">[Interrupted]</span>
               )}
             </div>
 
@@ -215,8 +228,15 @@ export function ConversationTranscript({
       })}
 
       {conversationState === "assistant_thinking" && (
-        <div className="bubble-assistant flex items-center gap-2 text-xs font-medium opacity-80">
-          <div className="voice-wave" style={{ color: "#2563eb" }} aria-hidden="true">
+        <div
+          className="bubble-assistant flex items-center gap-2 text-xs font-medium"
+          style={{ color: "#86868b" }}
+        >
+          <div
+            className="voice-wave"
+            style={{ color: "#007aff" }}
+            aria-hidden="true"
+          >
             <span />
             <span />
             <span />

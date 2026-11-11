@@ -134,6 +134,31 @@ export function reduceTranscriptEvent(
       const role: TranscriptRole =
         itemObj.role === "assistant" ? "assistant" : "user";
       const { text, hasCompletedText } = extractInitialItemText(itemObj);
+
+      // Deduplicate optimistic client-created user text turns when server echoes conversation.item.created
+      if (role === "user" && hasCompletedText && text.length > 0) {
+        for (let idx = items.length - 1; idx >= 0; idx--) {
+          const candidate = items[idx];
+          if (candidate.role === "user") {
+            if (
+              candidate.id.startsWith("item_user_msg_") &&
+              candidate.text === text &&
+              now - (candidate.createdAt ?? now) <= 5000
+            ) {
+              const nextItems = [...items];
+              nextItems[idx] = {
+                ...candidate,
+                id: itemId,
+                status: "completed",
+                updatedAt: now,
+              };
+              return nextItems;
+            }
+            break;
+          }
+        }
+      }
+
       const status: TranscriptStatus =
         role === "user"
           ? hasCompletedText
@@ -578,12 +603,20 @@ export class TranscriptManager {
       case "response.text.delta":
       case "response.output_text.delta":
       case "response.audio.delta":
-      case "response.output_audio.delta":
-        if (this.conversationState !== "user_speaking") {
-          this.isAudioOutputActive = true; 
+      case "response.output_audio.delta": {
+        const deltaItemId =
+          parsed && typeof parsed.item_id === "string" ? parsed.item_id : "";
+        const existingItem = deltaItemId
+          ? this.items.find((i) => i.id === deltaItemId)
+          : undefined;
+        if (
+          this.conversationState !== "user_speaking" &&
+          existingItem?.status !== "interrupted"
+        ) {
           this.setConversationState("assistant_speaking");
         }
         break;
+      }
 
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":

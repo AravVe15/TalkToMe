@@ -16,6 +16,7 @@ import {
   RealtimeControlsManager,
   type MicStatus,
 } from "../lib/realtime/controls";
+import { RealtimeAudioVisualizer } from "../lib/realtime/audio-visualizer";
 import { SourceIngestion } from "@/components/SourceIngestion";
 import {
   SourcePreview,
@@ -46,7 +47,6 @@ export interface HomePageProps {
 export default function Home(props: any) {
   const safeProps: HomePageProps = (props as HomePageProps) || {};
 
-  // Local state initialized from props (or sensible production defaults)
   const [sourceState, setSourceState] = useState<SourcePreviewData | null>(
     safeProps.initialSource ?? null
   );
@@ -81,7 +81,6 @@ export default function Home(props: any) {
     safeProps.previewExpanded ?? false
   );
 
-  // Active / controlled values honoring props if explicitly passed
   const source =
     safeProps.initialSource !== undefined
       ? safeProps.initialSource
@@ -117,14 +116,18 @@ export default function Home(props: any) {
       ? safeProps.previewExpanded
       : previewExpandedState;
 
-  // Refs for Slice 3 managers and WebRTC resources
+  const mainRef = useRef<HTMLElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const connectionManagerRef = useRef<RealtimeConnectionManager | null>(null);
   const controlsManagerRef = useRef<RealtimeControlsManager | null>(null);
   const transcriptManagerRef = useRef<TranscriptManager | null>(null);
+  const visualizerRef = useRef<RealtimeAudioVisualizer | null>(null);
 
-  // Helper to deterministically tear down active WebRTC resources without overwriting target state
   const teardownActiveSession = useCallback(() => {
+    if (visualizerRef.current) {
+      visualizerRef.current.stop();
+      visualizerRef.current = null;
+    }
     if (connectionManagerRef.current) {
       connectionManagerRef.current.disconnect();
       connectionManagerRef.current = null;
@@ -135,10 +138,13 @@ export default function Home(props: any) {
     transcriptManagerRef.current = null;
   }, []);
 
-  // Deterministic teardown on component unmount (ADR-06 / AC-06.2)
   useEffect(() => {
     const currentAudio = audioRef.current;
     return () => {
+      if (visualizerRef.current) {
+        visualizerRef.current.stop();
+        visualizerRef.current = null;
+      }
       if (connectionManagerRef.current) {
         connectionManagerRef.current.disconnect();
         connectionManagerRef.current = null;
@@ -148,9 +154,29 @@ export default function Home(props: any) {
     };
   }, []);
 
-  // PDF Ingestion (Slice 1)
+  // Visual Viewport iOS Keyboard Offset Tracking
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.visualViewport) {
+      return;
+    }
+    const vv = window.visualViewport;
+    const handleViewportChange = () => {
+      if (!mainRef.current) return;
+      const offset = Math.max(
+        0,
+        window.innerHeight - (vv.height + vv.offsetTop)
+      );
+      mainRef.current.style.setProperty("--keyboard-offset", `${offset}px`);
+    };
+    vv.addEventListener("resize", handleViewportChange);
+    vv.addEventListener("scroll", handleViewportChange);
+    return () => {
+      vv.removeEventListener("resize", handleViewportChange);
+      vv.removeEventListener("scroll", handleViewportChange);
+    };
+  }, []);
+
   const handlePdfSelected = async (file: File) => {
-    // 1. Clean up any active call first before entering "ingesting" state
     teardownActiveSession();
     setConversationStateState("listening");
     setErrorState(null);
@@ -187,9 +213,7 @@ export default function Home(props: any) {
     }
   };
 
-  // YouTube Ingestion (Slice 1)
   const handleYouTubeSubmit = async (url: string) => {
-    // 1. Clean up any active call first before entering "ingesting" state
     teardownActiveSession();
     setConversationStateState("listening");
     setErrorState(null);
@@ -226,7 +250,6 @@ export default function Home(props: any) {
     }
   };
 
-  // Start / Reconnect Voice Session (Slices 2 & 3)
   const handleStartVoiceChat = async () => {
     if (!source) return;
 
@@ -237,7 +260,6 @@ export default function Home(props: any) {
     setTextFallbackState(false);
     setConnectionStateState("connecting");
 
-    // Synchronous audio gesture unlock for iOS Safari (ADR-11 / AC-11.3)
     if (audioRef.current) {
       try {
         const playPromise = audioRef.current.play?.();
@@ -254,7 +276,6 @@ export default function Home(props: any) {
       }
     }
 
-    // 1. Initialize TranscriptManager (Slice 3B)
     const tm = new TranscriptManager({
       initialItems: transcript,
       onTranscriptChange: (items) => setTranscriptState([...items]),
@@ -267,7 +288,6 @@ export default function Home(props: any) {
     });
     transcriptManagerRef.current = tm;
 
-    // 2. Initialize RealtimeControlsManager (Slice 3C)
     const controls = new RealtimeControlsManager({
       audioElement: audioRef.current,
       transcriptManager: tm,
@@ -278,7 +298,6 @@ export default function Home(props: any) {
     });
     controlsManagerRef.current = controls;
 
-    // 3. Initialize RealtimeConnectionManager (Slice 3A)
     const connectionManager = new RealtimeConnectionManager({
       audioElement: audioRef.current,
       allowTextFallback: true,
@@ -319,23 +338,29 @@ export default function Home(props: any) {
           localStream?.getAudioTracks?.()[0] ??
           localStream?.getTracks?.()[0] ??
           null;
+
+        if (mainRef.current) {
+          const viz = new RealtimeAudioVisualizer({
+            targetElement: mainRef.current,
+            localStream: localStream ?? null,
+            audioElement: audioRef.current,
+          });
+          viz.start();
+          visualizerRef.current = viz;
+        }
       },
       onEvent: (parsed) => {
         if (typeof parsed === "object" && parsed !== null) {
           const evtType = (parsed as { type?: string }).type;
-          // Automatic barge-in on Server VAD speech_started (ADR-07 / AC-07.1)
           if (evtType === "input_audio_buffer.speech_started") {
             controls.handleBargeIn(parsed);
           } else if (
             evtType === "response.created" ||
             evtType === "output_audio_buffer.started" ||
-            evtType === "response.output_item.added" ||
-            evtType === "response.audio_transcript.delta" ||
-            evtType === "response.output_audio_transcript.delta" ||
-            evtType === "response.audio.delta" ||
-            evtType === "response.output_audio.delta"
+            evtType === "response.output_item.added"
           ) {
             controls.ensureAudioPlayback();
+            visualizerRef.current?.attachRemoteFromAudioElement();
           }
         }
         tm.handleEvent(parsed);
@@ -355,11 +380,10 @@ export default function Home(props: any) {
     try {
       await connectionManager.connect();
     } catch {
-      // Error state and resource teardown are handled inside RealtimeConnectionManager.connect()
+      // Handled inside RealtimeConnectionManager.connect()
     }
   };
 
-  // Stop / End Call Handler (ADR-06 / AC-06.2)
   const handleStopVoiceChat = () => {
     teardownActiveSession();
     setConnectionStateState(source ? "ready" : "idle");
@@ -367,7 +391,6 @@ export default function Home(props: any) {
     setIsMutedState(false);
   };
 
-  // Manual Speech Interruption (ADR-07 / AC-07.2)
   const handleInterrupt = () => {
     if (controlsManagerRef.current) {
       controlsManagerRef.current.interrupt();
@@ -375,7 +398,6 @@ export default function Home(props: any) {
     setConversationStateState("listening");
   };
 
-  // Mute / Unmute Toggle (ADR-09 / AC-09.3)
   const handleToggleMute = () => {
     if (controlsManagerRef.current) {
       const nextMuted = controlsManagerRef.current.toggleMute();
@@ -385,7 +407,6 @@ export default function Home(props: any) {
     }
   };
 
-  // Text Message Dispatch (ADR-09 / AC-09.2)
   const handleSendText = (text: string) => {
     if (controlsManagerRef.current) {
       controlsManagerRef.current.sendTextMessage(text);
@@ -414,13 +435,14 @@ export default function Home(props: any) {
 
   return (
     <main
-      className={`max-w-md mx-auto flex flex-col bg-slate-50 text-slate-900 ${
+      ref={mainRef}
+      data-conversation-state={conversationState}
+      className={`max-w-md mx-auto flex flex-col ${
         isConnected || isTextFallback
           ? "h-dvh max-h-dvh overflow-hidden"
           : "min-h-dvh overflow-x-hidden"
       }`}
     >
-      {/* Remote Audio Element for WebRTC audio playback (ADR-11 / AC-11.3) */}
       <audio
         ref={audioRef}
         autoPlay
@@ -429,54 +451,40 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Top Application Header */}
+      {/* Minimalist Borderless iOS Navigation Bar */}
       <header
-        className="sticky top-0 z-20 px-4 py-3 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs shrink-0"
+        className="apple-nav-bar shrink-0"
         style={{
           paddingTop:
-            "calc(0.75rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
+            "calc(0.65rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
         }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-base font-bold text-slate-900 tracking-tight">
-              Talk to a Document or YouTube Video
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Live voice conversations powered by OpenAI Realtime API
-            </p>
-          </div>
+        <div>
+          <h1 className="apple-nav-title">
+            Talk to a Document or YouTube Video
+          </h1>
+          <p className="sr-only">
+            Live voice conversations powered by OpenAI Realtime API
+          </p>
         </div>
       </header>
 
       {/* Error Alert Banner */}
       {error && (
-        <div
-          role="alert"
-          className="mx-4 mt-3 p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs font-medium shadow-xs shrink-0"
-        >
+        <div role="alert" className="apple-alert-error shrink-0">
           {error}
         </div>
       )}
 
       {/* Main Content Area */}
       <div
-        className={`flex-1 flex flex-col gap-3 p-4 ${
-          isConnected || isTextFallback ? "min-h-0 overflow-hidden" : ""
+        className={`flex-1 flex flex-col gap-3 px-4 py-2 ${
+          isConnected || isTextFallback
+            ? "min-h-0 overflow-hidden"
+            : "justify-center"
         }`}
       >
-        {/* Top Controls / Context Area (shrink-0 during active call so transcript gets remaining space) */}
-        <div className="flex flex-col gap-3 shrink-0">
-          {!isConnected && (
-            <SourceIngestion
-              connectionState={connectionState}
-              canStartVoiceChat={canStartVoiceChat}
-              onPdfSelected={handlePdfSelected}
-              onYouTubeSubmit={handleYouTubeSubmit}
-              onStartVoiceChat={handleStartVoiceChat}
-            />
-          )}
-
+        <div className="flex flex-col gap-2.5 shrink-0">
           {source && (
             <SourcePreview
               source={source}
@@ -487,6 +495,16 @@ export default function Home(props: any) {
             />
           )}
 
+          {!isConnected && (
+            <SourceIngestion
+              connectionState={connectionState}
+              canStartVoiceChat={canStartVoiceChat}
+              onPdfSelected={handlePdfSelected}
+              onYouTubeSubmit={handleYouTubeSubmit}
+              onStartVoiceChat={handleStartVoiceChat}
+            />
+          )}
+
           <SessionStatus
             connectionState={connectionState}
             conversationState={conversationState}
@@ -494,7 +512,6 @@ export default function Home(props: any) {
           />
         </div>
 
-        {/* Real-Time Synchronized Conversation Transcript (scrollable flex-1 container during call) */}
         {showTranscriptArea && (
           <div className="flex-1 min-h-0 flex flex-col">
             <ConversationTranscript
@@ -505,7 +522,6 @@ export default function Home(props: any) {
         )}
       </div>
 
-      {/* Sticky Bottom Dock: Voice & Text Controls */}
       <SessionControls
         connectionState={connectionState}
         conversationState={conversationState}

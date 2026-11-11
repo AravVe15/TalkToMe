@@ -18,36 +18,49 @@ export function SessionStatus({
   onReconnect,
 }: SessionStatusProps) {
   const isConnected = connectionState === "connected";
+  const isConnecting = connectionState === "connecting";
   const isReconnecting = connectionState === "reconnecting";
   const isError = connectionState === "error";
+  const showOrb = isConnected || isConnecting || isReconnecting;
 
   return (
-    <div className="ios-card flex flex-col gap-2 p-3">
-      <div className="flex items-center justify-between gap-2">
-        {/* Connection State Badge */}
-        <div className="flex items-center gap-2">
+    <div className="apple-status-strip">
+      {/* Clean Apple / ChatGPT Breathing Voice Circle (Only during active/connecting session) */}
+      {showOrb && (
+        <div className="apple-voice-orb-wrap" aria-hidden="true">
+          <div className="apple-voice-orb" data-state={conversationState} />
+        </div>
+      )}
+
+      {/* Minimalist Borderless Status Pill Row */}
+      <div className="flex items-center justify-center gap-2">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full">
           <span
-            className="w-2.5 h-2.5 rounded-full inline-block"
+            className="inline-block rounded-full"
             style={{
-              width: "10px",
-              height: "10px",
+              width: "7px",
+              height: "7px",
               borderRadius: "50%",
               backgroundColor:
                 connectionState === "connected"
-                  ? "#16a34a"
+                  ? "#34c759"
                   : connectionState === "connecting"
-                    ? "#2563eb"
+                    ? "#007aff"
                     : connectionState === "reconnecting"
-                      ? "#d97706"
+                      ? "#ff9500"
                       : connectionState === "error"
-                        ? "#dc2626"
-                        : "#94a3b8",
+                        ? "#ff3b30"
+                        : "#86868b",
             }}
           />
-          <span className="text-xs font-semibold capitalize" style={{ fontSize: "13px" }}>
+          <span
+            className="text-xs font-medium"
+            style={{ color: "#86868b", fontSize: "12px" }}
+          >
             {connectionState === "connecting" && "Connecting..."}
             {connectionState === "connected" && "Connected (Live)"}
-            {connectionState === "reconnecting" && "Reconnecting (Unstable network)..."}
+            {connectionState === "reconnecting" &&
+              "Reconnecting (Unstable network)..."}
             {connectionState === "error" && "Connection Error (Failed)"}
             {connectionState === "ready" && "Ready"}
             {connectionState === "idle" && "Idle"}
@@ -55,27 +68,13 @@ export function SessionStatus({
           </span>
         </div>
 
-        {/* Conversation Sub-State Badge (when connected) */}
         {isConnected && (
           <div
             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
             style={{
-              backgroundColor:
-                conversationState === "assistant_speaking"
-                  ? "#dbeafe"
-                  : conversationState === "assistant_thinking"
-                    ? "#fef3c7"
-                    : conversationState === "user_speaking"
-                      ? "#dcfce7"
-                      : "#f1f5f9",
-              color:
-                conversationState === "assistant_speaking"
-                  ? "#1e40af"
-                  : conversationState === "assistant_thinking"
-                    ? "#92400e"
-                    : conversationState === "user_speaking"
-                      ? "#166534"
-                      : "#475569",
+              backgroundColor: "rgba(0, 122, 255, 0.08)",
+              color: "#007aff",
+              fontSize: "12px",
             }}
           >
             {(conversationState === "assistant_speaking" ||
@@ -89,42 +88,28 @@ export function SessionStatus({
             <span>
               {conversationState === "listening" && "Listening"}
               {conversationState === "user_speaking" && "You are speaking"}
-              {conversationState === "assistant_thinking" && "Assistant thinking"}
-              {conversationState === "assistant_speaking" && "Assistant speaking"}
+              {conversationState === "assistant_thinking" &&
+                "Assistant thinking"}
+              {conversationState === "assistant_speaking" &&
+                "Assistant speaking"}
             </span>
           </div>
         )}
       </div>
 
-      {/* Network Unstable Notice (AC-10.1) */}
       {isReconnecting && (
-        <div
-          role="status"
-          className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 rounded-md text-xs font-medium"
-          style={{
-            backgroundColor: "#fffbeb",
-            borderColor: "#fde68a",
-            color: "#78350f",
-          }}
-        >
+        <div role="status" className="apple-alert-warning">
           Network unstable — attempting to recover...
         </div>
       )}
 
-      {/* Reconnect Voice Session CTA (AC-10.3) */}
       {isError && (
-        <div className="pt-1">
+        <div className="w-full pt-1">
           <button
             type="button"
             onClick={onReconnect}
-            className="min-h-[44px] min-w-[44px] py-3 px-4 w-full font-bold text-white rounded-md text-sm shadow-md"
-            style={{
-              minHeight: "44px",
-              minWidth: "44px",
-              width: "100%",
-              borderRadius: "14px",
-              background: "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)",
-            }}
+            className="apple-primary-btn min-h-[44px] min-w-[44px]"
+            style={{ minHeight: "44px", minWidth: "44px" }}
           >
             Reconnect Voice Session
           </button>

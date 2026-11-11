@@ -158,23 +158,93 @@ export function interruptAssistant(options: {
 /**
  * Dispatches a text message turn over the data channel (`conversation.item.create` + `response.create`)
  * and appends the user message to the transcript (ADR-09 / AC-09.2, AC-10.4).
+ * If an assistant response is actively streaming or thinking when `interruptIfSpeaking` is true,
+ * preemptively halts playback and cancels the in-flight response before sending the new turn.
  */
 export function sendTextMessage(options: {
   text: string;
   dataChannel?: RTCDataChannel | null;
+  audioElement?: HTMLAudioElement | null;
   transcriptManager?: TranscriptManager | null;
+  onConversationStateChange?: (state: RealtimeConversationState) => void;
   sendEvent?: (event: unknown) => boolean;
+  interruptIfSpeaking?: boolean;
 }): boolean {
   const trimmed = (options.text ?? "").trim();
   if (!trimmed) {
     return false;
   }
 
+  const hasSendFn = typeof options.sendEvent === "function";
+  if (!hasSendFn) {
+    if (!options.dataChannel || options.dataChannel.readyState !== "open") {
+      return false;
+    }
+  }
+
+  // Determine whether an assistant turn is actively speaking or thinking
+  let shouldInterrupt = Boolean(options.interruptIfSpeaking);
+  if (!shouldInterrupt && options.transcriptManager) {
+    const tmState = options.transcriptManager.conversationState;
+    const ext = options.transcriptManager as unknown as {
+      isAudioOutputActive?: boolean;
+    };
+    const hasStreamingAssistantItem = options.transcriptManager
+      .getItems()
+      .some((item) => item.role === "assistant" && item.status === "streaming");
+    if (
+      tmState === "assistant_speaking" ||
+      tmState === "assistant_thinking" ||
+      Boolean(ext.isAudioOutputActive) ||
+      hasStreamingAssistantItem
+    ) {
+      shouldInterrupt = true;
+    }
+  }
+
+  if (shouldInterrupt) {
+    // 1. Silence remote speaker immediately without pausing WebRTC MediaStream
+    if (options.audioElement) {
+      options.audioElement.muted = true;
+    }
+
+    // 2. Preemptively cancel active response and clear output audio buffer
+    const cancelEvent = { type: "response.cancel" };
+    const clearBufferEvent = { type: "output_audio_buffer.clear" };
+    if (hasSendFn && options.sendEvent) {
+      try {
+        options.sendEvent(cancelEvent);
+        options.sendEvent(clearBufferEvent);
+      } catch {
+        // Ignore cancellation send errors and proceed with text dispatch check
+      }
+    } else if (options.dataChannel && options.dataChannel.readyState === "open") {
+      try {
+        options.dataChannel.send(JSON.stringify(cancelEvent));
+        options.dataChannel.send(JSON.stringify(clearBufferEvent));
+      } catch {
+        // Ignore cancellation send errors
+      }
+    }
+
+    // 3. Mark in-progress assistant transcript turn as interrupted
+    if (options.transcriptManager) {
+      const ext = options.transcriptManager as unknown as {
+        markAssistantInterrupted?: () => void;
+      };
+      if (typeof ext.markAssistantInterrupted === "function") {
+        ext.markAssistantInterrupted();
+      } else {
+        options.transcriptManager.handleEvent?.(cancelEvent);
+      }
+    }
+  }
+
   const itemEvent = createTextInputMessageEvent(trimmed);
   const responseEvent = { type: "response.create" };
 
   let sent = false;
-  if (typeof options.sendEvent === "function") {
+  if (hasSendFn && options.sendEvent) {
     try {
       const s1 = options.sendEvent(itemEvent);
       const s2 = options.sendEvent(responseEvent);
@@ -210,6 +280,10 @@ export function sendTextMessage(options: {
     } else {
       options.transcriptManager.handleEvent?.(itemEvent);
     }
+  }
+
+  if (shouldInterrupt) {
+    options.onConversationStateChange?.("assistant_thinking");
   }
 
   return true;
@@ -330,13 +404,24 @@ export class RealtimeControlsManager {
 
   /**
    * Sends a user text message turn and triggers response generation (ADR-09 / AC-09.2).
+   * If the assistant is currently speaking or thinking, preemptively interrupts the active
+   * response before dispatching the new text turn.
    */
   sendTextMessage(text: string): boolean {
+    const shouldInterrupt =
+      this.isAssistantSpeaking() ||
+      this.conversationState === "assistant_thinking";
+
     return sendTextMessage({
       text,
       dataChannel: this.dataChannel,
+      audioElement: this.audioElement,
       transcriptManager: this.transcriptManager,
       sendEvent: this.options.sendEvent,
+      interruptIfSpeaking: shouldInterrupt,
+      onConversationStateChange: (state) => {
+        this.setConversationState(state);
+      },
     });
   }
 

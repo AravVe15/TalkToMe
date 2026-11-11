@@ -36,20 +36,25 @@ export function SourceIngestion({
   };
 
   return (
-    <div className="ios-card flex flex-col gap-4 p-4">
+    <div className="apple-sheet">
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">1. Choose a Source</h2>
-        <p className="text-xs text-muted" style={{ color: "var(--text-muted)" }}>
-          Upload a PDF (up to 25 MB) or enter a YouTube video URL with captions.
+        <h2
+          className="text-lg font-bold tracking-tight"
+          style={{ color: "#1d1d1f", fontSize: "19px" }}
+        >
+          Choose a Source
+        </h2>
+        <p className="text-xs" style={{ color: "#86868b", fontSize: "13px" }}>
+          Upload a PDF (up to 25 MB) or paste a YouTube link.
         </p>
       </div>
 
       {/* PDF Upload */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <label
           htmlFor="pdf-upload"
-          className="text-sm font-semibold"
-          style={{ fontSize: "14px" }}
+          className="text-xs font-semibold"
+          style={{ color: "#1d1d1f", fontSize: "13px" }}
         >
           Upload PDF Document
         </label>
@@ -59,62 +64,38 @@ export function SourceIngestion({
           accept=".pdf,application/pdf"
           disabled={isIngesting || isConnecting}
           onChange={handleFileChange}
-          className="text-base py-2 px-3 border border-slate-300 rounded-xl"
-          style={{
-            fontSize: "16px",
-            minHeight: "44px",
-            borderRadius: "12px",
-            borderColor: "#cbd5e1",
-          }}
+          className="text-base"
+          style={{ fontSize: "16px", minHeight: "44px" }}
         />
       </div>
 
-      <div className="text-xs text-center text-muted" style={{ color: "var(--text-muted)" }}>
-        — OR —
-      </div>
+      <div className="apple-divider">or</div>
 
-      {/* YouTube URL Input */}
-      <form onSubmit={handleUrlSubmit} className="flex flex-col gap-2">
+      {/* Inline YouTube URL Pill Bar (Input + Button in one row) */}
+      <form onSubmit={handleUrlSubmit} className="flex flex-col gap-1.5">
         <label
           htmlFor="youtube-url"
-          className="text-sm font-semibold"
-          style={{ fontSize: "14px" }}
+          className="text-xs font-semibold"
+          style={{ color: "#1d1d1f", fontSize: "13px" }}
         >
           YouTube Video URL
         </label>
-        <div className="flex flex-col gap-2">
+        <div className="apple-url-bar">
           <input
             id="youtube-url"
             type="url"
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
-            placeholder="Paste YouTube video URL (e.g. https://youtu.be/...)"
+            placeholder="Paste YouTube video URL..."
             disabled={isIngesting || isConnecting}
-            className="text-base py-3 px-4 border border-slate-300 rounded-xl"
-            style={{
-              fontSize: "16px",
-              minHeight: "44px",
-              borderRadius: "12px",
-              borderColor: "#cbd5e1",
-            }}
+            className="apple-url-input text-base"
+            style={{ fontSize: "16px", minHeight: "44px" }}
           />
           <button
             type="submit"
             disabled={isIngesting || isConnecting || !youtubeUrl.trim()}
-            className="min-h-[44px] min-w-[44px] py-3 px-4 font-semibold text-white rounded-xl transition-all"
-            style={{
-              minHeight: "44px",
-              minWidth: "44px",
-              borderRadius: "12px",
-              background:
-                !isIngesting && !isConnecting && youtubeUrl.trim()
-                  ? "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)"
-                  : "#94a3b8",
-              boxShadow:
-                !isIngesting && !isConnecting && youtubeUrl.trim()
-                  ? "0 3px 10px rgba(37, 99, 235, 0.22)"
-                  : "none",
-            }}
+            className="apple-url-submit min-h-[44px] min-w-[44px]"
+            style={{ minHeight: "44px", minWidth: "44px" }}
           >
             Load Video
           </button>
@@ -125,39 +106,23 @@ export function SourceIngestion({
       {isIngesting && (
         <div
           role="status"
-          className="p-3 bg-slate-100 border border-gray-200 rounded-md text-sm text-center font-semibold"
+          className="p-2.5 rounded-xl text-xs text-center font-semibold animate-pulse"
+          style={{ background: "#f5f5f7", color: "#007aff" }}
         >
           Extracting source content...
         </div>
       )}
 
-      {/* Start Voice Chat CTA */}
-      <div className="pt-2">
-        <button
-          type="button"
-          disabled={!canStartVoiceChat}
-          onClick={onStartVoiceChat}
-          className={`min-h-[44px] min-w-[44px] py-3 px-4 w-full font-bold text-white rounded-2xl text-base transition-all ${
-            canStartVoiceChat
-              ? "cursor-pointer"
-              : "cursor-not-allowed opacity-60"
-          }`}
-          style={{
-            minHeight: "44px",
-            minWidth: "44px",
-            width: "100%",
-            borderRadius: "14px",
-            background: canStartVoiceChat
-              ? "linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)"
-              : "#94a3b8",
-            boxShadow: canStartVoiceChat
-              ? "0 4px 14px rgba(37, 99, 235, 0.28)"
-              : "none",
-          }}
-        >
-          Start Voice Chat
-        </button>
-      </div>
+      {/* Primary Start Voice Chat Pill CTA */}
+      <button
+        type="button"
+        disabled={!canStartVoiceChat}
+        onClick={onStartVoiceChat}
+        className="apple-primary-btn min-h-[44px] min-w-[44px]"
+        style={{ minHeight: "48px", minWidth: "44px" }}
+      >
+        Start Voice Chat
+      </button>
     </div>
   );
 }

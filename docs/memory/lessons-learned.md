@@ -276,6 +276,39 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Embedded Audio Transport Indicators**:
   - Embedding `.voice-wave` micro-animations directly inside conversation sub-state pills during `assistant_speaking` and `user_speaking` provides clear peripheral confirmation of active WebRTC audio transmission across noisy mobile environments.
 
+---
+
+## 29. 2026 iOS "Liquid Glass" Spatial Design System & Preemptive Text Barge-In Mechanics
+
+- **Preemptive Interruption on User Text Send (`sendTextMessage`)**:
+  - Sending a text message turn while the assistant is actively speaking or thinking bypasses OpenAI's `server_vad` hardware DSP loop. Unless an explicit preemptive interruption (`response.cancel` + `output_audio_buffer.clear` + client muting) is dispatched prior to creating the new text item, OpenAI continues playback of the prior voice turn while queuing the text reply behind it.
+  - In `RealtimeControlsManager.sendTextMessage`, checking `isAssistantSpeaking()` or `conversationState === "assistant_thinking"` triggers immediate audio silencing (`audioElement.muted = true`), marks the assistant turn as interrupted in `TranscriptManager`, transitions to `assistant_thinking`, and dispatches cancellation packets before queuing the new prompt.
+- **In-Flight Audio Delta Unmute Protection**:
+  - When an assistant turn is cancelled or interrupted, residual audio and transcript delta packets continue arriving over the data channel for 50–200ms.
+  - Invoking `controls.ensureAudioPlayback()` unconditionally on `response.audio.delta` prematurely unmuted the `<audio>` element, leaking trailing speech audio. Guarding `ensureAudioPlayback()` so it only unmutes at the true onset of a new turn (`response.created`, `output_audio_buffer.started`, `response.output_item.added`) ensures cancelled turns remain silent while new turns seamlessly play.
+- **Optimistic Turn Deduplication**:
+  - When the client optimistically creates a user text bubble (`item_user_msg_...`) and the OpenAI server later echoes `conversation.item.created` with a server-assigned `id`, matching the existing recent user item by text and role within a 5-second window and updating its ID in-place eliminates duplicate bubbles in the transcript feed.
+- **Zero-Re-Render 60FPS Web Audio Visualizer**:
+  - Connecting `MediaStreamAudioSourceNode` and `AnalyserNode` to the WebRTC streams and writing normalized audio energy directly to CSS custom properties (`--voice-energy`, `--orb-scale`, `--orb-glow`) on the root container in a `requestAnimationFrame` loop drives fluid organic orb animations at 60–120fps with zero React state re-renders.
+- **Visual Viewport iOS Keyboard Tracking**:
+  - Listening to `window.visualViewport` resize and scroll events updates `--keyboard-offset` on the root container, allowing the bottom glassmorphic dock to glide upward seamlessly above the iOS Safari software keyboard without layout clipping or jumpiness.
+
+---
+
+## 30. Apple iOS Light Mode & Zero-Rectangle Layout System
+
+- **Zero-Rectangle Spatial Layout**:
+  - Replaced boxy nested cards and grey bounding borders with borderless, open spatial design:
+    - Minimalist borderless iOS navigation bar with blur backdrop (`rgba(245, 245, 247, 0.82)`).
+    - Single unified onboarding sheet (`.apple-sheet`) for source ingestion with integrated inline URL pill bar.
+    - Slim attachment pill (`.apple-attachment-pill`) for source preview, avoiding stacked box syndrome.
+    - Clean borderless ChatGPT/Apple voice breathing orb (`.apple-voice-orb`) with harmonic state transitions.
+    - Open borderless transcript feed with gradient fade mask (`mask-image: linear-gradient(...)`).
+- **Visualizer Audio Attachment Binding**:
+  - When `page.tsx` attaches remote audio on response turn creation (`response.created`, `output_audio_buffer.started`, `response.output_item.added`), providing `attachRemoteFromAudioElement()` on `RealtimeAudioVisualizer` ensures seamless remote stream synchronization to the Web Audio `AnalyserNode`.
+
+
+
 
 
 

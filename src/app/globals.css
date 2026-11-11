@@ -1,21 +1,26 @@
 :root {
-  /* iOS Safe-Area CSS Insets (ADR-11, AC-11.4 / apple-web-app skill) */
+  /* iOS Safe-Area CSS Insets (ADR-11, AC-11.4) */
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
 
-  --header-height: calc(3.5rem + var(--safe-area-inset-top));
+  --header-height: calc(3rem + var(--safe-area-inset-top));
+  --keyboard-offset: 0px;
+  --voice-energy: 0;
+  --orb-scale: 1;
+  --orb-glow: 0.18;
 
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --border: #e2e8f0;
+  /* Pure Apple iOS Light Mode Palette */
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --primary: #007aff;
+  --primary-hover: #0062cc;
+  --border: rgba(0, 0, 0, 0.07);
   --card: #ffffff;
-  --text-muted: #64748b;
-  --user-bubble: #2563eb;
-  --assistant-bubble: #f1f5f9;
+  --text-muted: #86868b;
+  --user-bubble: #007aff;
+  --assistant-bubble: #ffffff;
 }
 
 *,
@@ -31,13 +36,13 @@ body {
   padding: 0;
   background-color: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
-    Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans",
-    "Helvetica Neue", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
+  letter-spacing: -0.012em;
 }
 
 h1,
@@ -56,11 +61,11 @@ button {
   appearance: none;
   -webkit-appearance: none;
   transition: background-color 0.15s ease, opacity 0.15s ease,
-    transform 0.1s ease, box-shadow 0.15s ease;
+    transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s ease;
 }
 
 button:active:not(:disabled) {
-  transform: scale(0.985);
+  transform: scale(0.97);
 }
 
 button:disabled {
@@ -71,48 +76,51 @@ input {
   font-family: inherit;
   color: var(--foreground);
   background-color: #ffffff;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    background-color 0.15s ease;
 }
 
 input:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 input:disabled {
-  background-color: #f1f5f9;
-  color: #94a3b8;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
-/* Custom File Input Button Styling */
+/* Apple iOS File Input Styling */
 input[type="file"] {
   display: flex;
   align-items: center;
   width: 100%;
-  color: #475569;
-  background-color: #f8fafc;
+  color: var(--text-muted);
+  background-color: #f5f5f7;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 0.4rem 0.6rem;
+  font-size: 16px;
+  min-height: 46px;
   cursor: pointer;
 }
 
 input[type="file"]::file-selector-button {
   margin-right: 0.75rem;
-  padding: 0.5rem 0.875rem;
-  border-radius: 0.375rem;
-  border: 1px solid #cbd5e1;
+  padding: 0.45rem 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   background-color: #ffffff;
-  color: #0f172a;
+  color: #1d1d1f;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
 input[type="file"]::file-selector-button:hover {
-  background-color: #f1f5f9;
-  border-color: #94a3b8;
+  background-color: #fafafa;
 }
 
 /* Touch Ergonomics & Double-Tap Zoom Suppression (ADR-11 / AC-11.2) */
@@ -142,496 +150,215 @@ main,
 }
 
 /* ==========================================================================
-   Complete Mobile-First Utility Classes
+   Utility Classes
    ========================================================================== */
 
-/* Layout & Positioning */
 .max-w-md {
   max-width: 28rem;
 }
-
-.max-w-\[85\%\] {
-  max-width: 85%;
-}
-
 .w-full {
   width: 100%;
 }
-
-.w-2\.5 {
-  width: 0.625rem;
-}
-
-.h-2\.5 {
-  height: 0.625rem;
-}
-
-.h-11 {
-  height: 44px;
-}
-
 .min-w-0 {
   min-width: 0;
 }
-
+.min-h-0 {
+  min-height: 0;
+}
 .min-h-dvh {
   min-height: 100vh;
   min-height: 100dvh;
 }
-
-/* 44x44px touch targets */
+.h-dvh {
+  height: 100vh;
+  height: 100dvh;
+}
+.max-h-dvh {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
 .min-h-\[44px\] {
   min-height: 44px;
 }
-
 .min-w-\[44px\] {
   min-width: 44px;
 }
-
 .mx-auto {
   margin-left: auto;
   margin-right: auto;
 }
-
-.ml-auto {
-  margin-left: auto;
+.shrink-0 {
+  flex-shrink: 0;
 }
-
-.mr-auto {
-  margin-right: auto;
+.overflow-hidden {
+  overflow: hidden;
 }
-
-.m-4 {
-  margin: 1rem;
-}
-
 .overflow-x-hidden {
   overflow-x: hidden;
 }
-
 .overflow-y-auto {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-
 .sticky {
   position: sticky;
 }
-
 .top-0 {
   top: 0;
 }
-
 .bottom-0 {
   bottom: 0;
 }
-
 .left-0 {
   left: 0;
 }
-
 .right-0 {
   right: 0;
 }
-
 .z-10 {
   z-index: 10;
 }
-
 .z-20 {
   z-index: 20;
 }
-
-/* Display & Flexbox */
 .flex {
   display: flex;
 }
-
 .flex-col {
   flex-direction: column;
 }
-
 .flex-1 {
   flex: 1 1 0%;
 }
-
+.inline-flex {
+  display: inline-flex;
+}
 .inline-block {
   display: inline-block;
 }
-
-.hidden {
-  display: none;
-}
-
 .items-center {
   align-items: center;
 }
-
 .justify-between {
   justify-content: space-between;
 }
-
 .justify-center {
   justify-content: center;
 }
-
-.self-end {
-  align-self: flex-end;
-}
-
-.self-start {
-  align-self: flex-start;
-}
-
-/* Spacing & Gaps */
 .gap-1 {
   gap: 0.25rem;
 }
-
+.gap-1\.5 {
+  gap: 0.375rem;
+}
 .gap-2 {
   gap: 0.5rem;
 }
-
 .gap-3 {
   gap: 0.75rem;
 }
-
 .gap-4 {
   gap: 1rem;
 }
-
 .p-2 {
   padding: 0.5rem;
 }
-
-.p-2\.5 {
-  padding: 0.625rem;
-}
-
 .p-3 {
   padding: 0.75rem;
 }
-
 .p-4 {
   padding: 1rem;
 }
-
-.p-6 {
-  padding: 1.5rem;
-}
-
-.px-2\.5 {
-  padding-left: 0.625rem;
-  padding-right: 0.625rem;
-}
-
 .px-3 {
   padding-left: 0.75rem;
   padding-right: 0.75rem;
 }
-
 .px-4 {
   padding-left: 1rem;
   padding-right: 1rem;
 }
-
 .py-1 {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
-
 .py-2 {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
 }
-
 .py-3 {
   padding-top: 0.75rem;
   padding-bottom: 0.75rem;
 }
-
-.pt-1 {
-  padding-top: 0.25rem;
-}
-
-.pt-2 {
-  padding-top: 0.5rem;
-}
-
-/* Typography (16px input font size to prevent iOS Safari auto-zoom) */
 .text-base {
   font-size: 16px;
   line-height: 1.5;
 }
-
 .text-xs {
   font-size: 0.75rem;
   line-height: 1rem;
 }
-
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
 }
-
 .text-lg {
   font-size: 1.125rem;
-  line-height: 1.75rem;
+  line-height: 1.5rem;
 }
-
 .font-medium {
   font-weight: 500;
 }
-
 .font-semibold {
   font-weight: 600;
 }
-
 .font-bold {
   font-weight: 700;
 }
-
 .font-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
-
 .italic {
   font-style: italic;
 }
-
 .uppercase {
   text-transform: uppercase;
 }
-
 .capitalize {
   text-transform: capitalize;
 }
-
+.tracking-tight {
+  letter-spacing: -0.02em;
+}
 .tracking-wider {
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
 }
-
 .leading-relaxed {
-  line-height: 1.625;
+  line-height: 1.55;
 }
-
 .text-center {
   text-align: center;
 }
-
 .truncate {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .whitespace-pre-wrap {
   white-space: pre-wrap;
 }
-
 .break-words {
   overflow-wrap: break-word;
   word-break: break-word;
 }
-
-/* Borders & Radius */
-.rounded-md {
-  border-radius: 0.5rem;
-}
-
-.rounded-lg {
-  border-radius: 0.75rem;
-}
-
 .rounded-full {
   border-radius: 9999px;
 }
-
-.rounded-br-none {
-  border-bottom-right-radius: 0.125rem;
+.rounded-xl {
+  border-radius: 0.875rem;
 }
-
-.rounded-bl-none {
-  border-bottom-left-radius: 0.125rem;
+.rounded-2xl {
+  border-radius: 1.25rem;
 }
-
-.border {
-  border-width: 1px;
-  border-style: solid;
-}
-
-.border-t {
-  border-top-width: 1px;
-  border-top-style: solid;
-}
-
-.border-b {
-  border-bottom-width: 1px;
-  border-bottom-style: solid;
-}
-
-.border-gray-200 {
-  border-color: #e2e8f0;
-}
-
-.border-red-200 {
-  border-color: #fecaca;
-}
-
-.border-amber-200 {
-  border-color: #fde68a;
-}
-
-.border-amber-300 {
-  border-color: #fcd34d;
-}
-
-/* Backgrounds & Text Colors */
-.bg-white {
-  background-color: #ffffff;
-}
-
-.bg-white\/95 {
-  background-color: rgba(255, 255, 255, 0.95);
-}
-
-.bg-slate-50 {
-  background-color: #f8fafc;
-}
-
-.bg-slate-100 {
-  background-color: #f1f5f9;
-}
-
-.bg-blue-600 {
-  background-color: #2563eb;
-}
-
-.bg-amber-50 {
-  background-color: #fffbeb;
-}
-
-.bg-amber-600 {
-  background-color: #d97706;
-}
-
-.bg-red-50 {
-  background-color: #fef2f2;
-}
-
-.bg-red-600 {
-  background-color: #dc2626;
-}
-
-.bg-gray-400 {
-  background-color: #94a3b8;
-}
-
-.text-white {
-  color: #ffffff;
-}
-
-.text-slate-800 {
-  color: #1e293b;
-}
-
-.text-slate-900 {
-  color: #0f172a;
-}
-
-.text-muted {
-  color: var(--text-muted);
-}
-
-.text-amber-900 {
-  color: #78350f;
-}
-
-.text-red-800 {
-  color: #991b1b;
-}
-
-/* Shadows, Glassmorphism & Interactive States */
-.shadow-sm {
-  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
-}
-
-.shadow-md {
-  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1),
-    0 2px 4px -2px rgba(15, 23, 42, 0.08);
-}
-
-.shadow-lg {
-  box-shadow: 0 -4px 12px -2px rgba(15, 23, 42, 0.08),
-    0 4px 6px -4px rgba(15, 23, 42, 0.06);
-}
-
-.backdrop-blur {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.opacity-60 {
-  opacity: 0.6;
-}
-
-.opacity-70 {
-  opacity: 0.7;
-}
-
-.opacity-80 {
-  opacity: 0.8;
-}
-
-.cursor-pointer {
-  cursor: pointer;
-}
-
-.cursor-not-allowed {
-  cursor: not-allowed;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
-.animate-pulse {
-  animation: pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* ==========================================================================
-   Modern iOS 18 / Voice AI App Shell & Polish
-   ========================================================================== */
-
-.h-dvh {
-  height: 100vh;
-  height: 100dvh;
-}
-
-.max-h-dvh {
-  max-height: 100vh;
-  max-height: 100dvh;
-}
-
-.min-h-0 {
-  min-height: 0;
-}
-
-.shrink-0 {
-  flex-shrink: 0;
-}
-
-.overflow-hidden {
-  overflow: hidden;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -644,16 +371,283 @@ main,
   border-width: 0;
 }
 
-/* Modern App Cards */
-.ios-card {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05),
-    0 1px 3px 0 rgba(15, 23, 42, 0.03);
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
-/* Scrollable Chat Feed Container */
+.animate-pulse {
+  animation: pulse 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* ==========================================================================
+   Apple iOS Light Mode Native Components (Zero Stacked Rectangles)
+   ========================================================================== */
+
+/* Minimalist Borderless iOS Top Bar */
+.apple-nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 0.5rem 1.25rem;
+  background: rgba(245, 245, 247, 0.82);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.apple-nav-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #1d1d1f;
+  letter-spacing: -0.015em;
+}
+
+/* Single Clean Apple Sheet for Onboarding (SourceIngestion) */
+.apple-sheet {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 1.25rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Inline YouTube URL Pill Bar (Input + Button combined into 1 pill) */
+.apple-url-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: #f5f5f7;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 0.25rem 0.25rem 0.25rem 0.875rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.apple-url-bar:focus-within {
+  background: #ffffff;
+  border-color: #007aff;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
+}
+
+.apple-url-input {
+  flex: 1 1 0%;
+  min-width: 0;
+  border: none !important;
+  background: transparent !important;
+  font-size: 16px;
+  color: #1d1d1f;
+  padding: 0.45rem 0;
+}
+
+.apple-url-input::placeholder {
+  color: #86868b;
+}
+
+.apple-url-submit {
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 1rem;
+  border-radius: 11px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: #1d1d1f;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.apple-url-submit:disabled {
+  background: rgba(0, 0, 0, 0.08);
+  color: #86868b;
+}
+
+/* Subtle Divider */
+.apple-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #86868b;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.apple-divider::before,
+.apple-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Primary Apple System Blue Pill CTA */
+.apple-primary-btn {
+  min-height: 50px;
+  min-width: 44px;
+  width: 100%;
+  border-radius: 9999px;
+  background: #007aff;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  box-shadow: 0 4px 14px rgba(0, 122, 255, 0.25);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.apple-primary-btn:hover:not(:disabled) {
+  background: #0062cc;
+}
+
+.apple-primary-btn:disabled {
+  background: rgba(0, 0, 0, 0.08);
+  color: #86868b;
+  box-shadow: none;
+}
+
+/* Slim Attachment Pill (SourcePreview — NOT a bulky card) */
+.apple-attachment-pill {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  padding: 0.625rem 0.875rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.apple-preview-toggle {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+}
+
+.apple-preview-drawer {
+  max-height: 160px;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: #f5f5f7;
+  color: #1d1d1f;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* Borderless Voice Presence & Status (SessionStatus — ZERO card box) */
+.apple-status-strip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+/* ChatGPT / Apple Voice Mode Clean Breathing Orb */
+.apple-voice-orb-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0;
+}
+
+.apple-voice-orb {
+  width: 52px;
+  height: 52px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 35% 30%,
+    #7dd3fc 0%,
+    #38bdf8 45%,
+    #007aff 100%
+  );
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.24);
+  transform: scale(var(--orb-scale, 1));
+  transition: transform 0.08s ease-out, background 0.35s ease,
+    box-shadow 0.35s ease;
+  animation: appleOrbBreathe 3.2s ease-in-out infinite;
+}
+
+.apple-voice-orb[data-state="user_speaking"] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    #6ee7b7 0%,
+    #34d399 45%,
+    #059669 100%
+  );
+  box-shadow: 0 6px 22px rgba(16, 185, 129, 0.28);
+}
+
+.apple-voice-orb[data-state="assistant_thinking"] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    #c4b5fd 0%,
+    #818cf8 50%,
+    #4f46e5 100%
+  );
+  box-shadow: 0 6px 22px rgba(99, 102, 241, 0.28);
+  animation: appleOrbPulseFast 1.2s ease-in-out infinite;
+}
+
+.apple-voice-orb[data-state="assistant_speaking"] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    #93c5fd 0%,
+    #3b82f6 45%,
+    #1d4ed8 100%
+  );
+  box-shadow: 0 8px 26px rgba(37, 99, 235, 0.32);
+}
+
+@keyframes appleOrbBreathe {
+  0%,
+  100% {
+    transform: scale(calc(var(--orb-scale, 1) * 0.97));
+  }
+  50% {
+    transform: scale(calc(var(--orb-scale, 1) * 1.04));
+  }
+}
+
+@keyframes appleOrbPulseFast {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+/* Open Borderless Transcript Stream (NO white box rectangle!) */
 .transcript-feed {
   flex: 1 1 0%;
   min-height: 0;
@@ -663,25 +657,35 @@ main,
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1rem;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 20px;
-  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02),
-    0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  padding: 0.75rem 0.25rem 1rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    black 16px,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    black 16px,
+    black 100%
+  );
 }
 
-/* Chat Bubbles */
+/* iMessage User & Assistant Bubbles */
 .bubble-user {
   align-self: flex-end;
   margin-left: auto;
   max-width: 82%;
-  padding: 0.75rem 1rem;
-  border-radius: 18px 18px 4px 18px;
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  padding: 0.65rem 0.95rem;
+  border-radius: 20px 20px 4px 20px;
+  background: #007aff;
   color: #ffffff;
-  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.22);
-  animation: bubbleIn 0.18s ease-out;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.16);
+  animation: bubbleIn 0.16s ease-out;
 }
 
 .bubble-assistant {
@@ -689,18 +693,18 @@ main,
   margin-right: auto;
   max-width: 86%;
   padding: 0.75rem 1rem;
-  border-radius: 18px 18px 18px 4px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
-  animation: bubbleIn 0.18s ease-out;
+  border-radius: 20px 20px 20px 4px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  color: #1d1d1f;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  animation: bubbleIn 0.16s ease-out;
 }
 
 @keyframes bubbleIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -711,12 +715,12 @@ main,
 /* Streaming Word Cursor & Soundwave Dots */
 .streaming-cursor {
   display: inline-block;
-  width: 6px;
-  height: 14px;
+  width: 5px;
+  height: 13px;
   margin-left: 4px;
   vertical-align: middle;
-  border-radius: 3px;
-  background-color: currentColor;
+  border-radius: 2px;
+  background-color: #007aff;
   opacity: 0.75;
   animation: pulse 0.9s infinite;
 }
@@ -724,17 +728,17 @@ main,
 .voice-wave {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  height: 14px;
+  gap: 2.5px;
+  height: 12px;
 }
 
 .voice-wave span {
   display: inline-block;
-  width: 3px;
+  width: 2.5px;
   height: 100%;
   border-radius: 9999px;
   background-color: currentColor;
-  animation: waveBounce 1s ease-in-out infinite;
+  animation: waveBounce 0.95s ease-in-out infinite;
 }
 
 .voice-wave span:nth-child(2) {
@@ -746,7 +750,8 @@ main,
 }
 
 @keyframes waveBounce {
-  0%, 100% {
+  0%,
+  100% {
     transform: scaleY(0.35);
   }
   50% {
@@ -754,7 +759,7 @@ main,
   }
 }
 
-/* Glassmorphic Bottom Controls Dock */
+/* Frosted Light Mode Bottom Dock */
 .ios-dock {
   flex-shrink: 0;
   position: sticky;
@@ -762,81 +767,79 @@ main,
   left: 0;
   right: 0;
   z-index: 30;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(226, 232, 240, 0.85);
-  padding: 0.75rem 1rem calc(0.75rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
-  box-shadow: 0 -8px 24px -4px rgba(15, 23, 42, 0.08);
+  background: rgba(245, 245, 247, 0.86);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 0.625rem 1rem
+    calc(
+      0.625rem +
+        var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+    );
+  transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
+  transition: transform 0.15s ease-out;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.5rem;
 }
 
-/* Modern Pill Action Buttons */
+/* Clean Apple Pill Action Buttons */
 .dock-pill-btn {
-  min-height: 46px;
+  min-height: 44px;
   min-width: 44px;
   flex: 1 1 0%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  padding: 0.625rem 1rem;
+  gap: 0.4rem;
+  padding: 0.5rem 0.875rem;
   border-radius: 9999px;
   font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-  transition: all 0.15s ease;
 }
 
 .dock-pill-mute {
-  background-color: #f1f5f9;
-  color: #1e293b;
-  border: 1px solid #cbd5e1;
-}
-
-.dock-pill-mute:hover {
-  background-color: #e2e8f0;
+  background-color: #ffffff;
+  color: #1d1d1f;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .dock-pill-muted {
-  background-color: #fef3c7;
-  color: #92400e;
-  border: 1px solid #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+  background-color: #fff8eb;
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .dock-pill-interrupt {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  background-color: #ff9500;
   color: #ffffff;
-  border: 1px solid #d97706;
-  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.28);
+  box-shadow: 0 2px 8px rgba(255, 149, 0, 0.25);
 }
 
 .dock-pill-end {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background-color: #ff3b30;
   color: #ffffff;
-  border: 1px solid #dc2626;
-  box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
+  box-shadow: 0 2px 8px rgba(255, 59, 48, 0.22);
 }
 
-/* iMessage-Style Pill Input Bar */
+/* iMessage White Pill Input Bar */
 .ios-input-pill {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background-color: #f1f5f9;
-  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 9999px;
-  padding: 0.25rem 0.35rem 0.25rem 1rem;
-  transition: all 0.15s ease;
+  padding: 0.2rem 0.25rem 0.2rem 1rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .ios-input-pill:focus-within {
-  background-color: #ffffff;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+  border-color: #007aff;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.12);
 }
 
 .ios-input-field {
@@ -847,34 +850,54 @@ main,
   font-size: 16px;
   line-height: 1.4;
   padding: 0.45rem 0;
-  color: #0f172a;
+  color: #1d1d1f;
 }
 
-.ios-input-field:focus {
-  outline: none;
-  box-shadow: none !important;
+.ios-input-field::placeholder {
+  color: #86868b;
 }
 
 .ios-send-btn {
-  min-height: 38px;
-  min-width: 68px;
-  padding: 0.45rem 0.95rem;
+  min-height: 36px;
+  min-width: 64px;
+  padding: 0.4rem 0.85rem;
   border-radius: 9999px;
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 600;
   color: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
+  gap: 0.25rem;
 }
 
 .ios-send-btn-active {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  background: #007aff;
 }
 
 .ios-send-btn-disabled {
-  background-color: #cbd5e1;
-  color: #64748b;
+  background-color: #e5e5ea;
+  color: #86868b;
+}
+
+/* Subtle Banners */
+.apple-alert-error {
+  margin: 0.5rem 1rem 0;
+  padding: 0.65rem 0.9rem;
+  background: #fff1f0;
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  color: #c92a2a;
+  border-radius: 14px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.apple-alert-warning {
+  padding: 0.5rem 0.75rem;
+  background: #fff9eb;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  color: #92400e;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }

@@ -333,6 +333,20 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Reader Sheet & Voice Memory Gauge**:
   - The expandable preview sheet provides immediate visibility into the AI's 48k character memory capacity with a dynamic gradient meter (`.apple-memory-bar-fill`) and human-friendly reading time estimate (`~X min read`).
 
+---
+
+## 33. File Input `:disabled` Opacity Glitch & Native iOS App Layout
+
+- **File Input `:disabled` Opacity Leak**:
+  - When custom file upload cards overlay an invisible native `<input type="file">` (`opacity: 0`), generic CSS rules like `input:disabled { opacity: 0.55; }` override the transparency when the input is disabled during ingestion. This inadvertently leaks the native browser file picker button ("Choose File / No file chosen") over the custom UI.
+  - Using `input:disabled:not(.apple-dropzone-input)` and explicitly declaring `.apple-dropzone-input:disabled { opacity: 0 !important; }` guarantees invisible overlay behavior across all component lifecycle states.
+- **Pre-Call Redundant Status De-Cluttering**:
+  - In native iOS applications, displaying diagnostic status labels like "Idle" or "Ready" beneath a fresh form creates unnecessary UI clutter.
+  - In `SessionStatus.tsx`, pre-call states (`idle`, `ingesting`, `ready`) are placed within `.sr-only` containers, preserving full semantic accessibility and satisfying unit test expectations without compromising clean visual design.
+- **Native Files Action Row vs. Dashed Web Dropzone**:
+  - Dashed borders are characteristic of legacy web upload forms. Replacing them with a solid rounded squircle row (`.apple-file-row`), document glyph icon, primary/secondary text labels, and an iOS pill badge ("Browse" / "Change") provides an authentic Apple Files app aesthetic.
+
+
 
 
 

@@ -452,7 +452,7 @@ export default function Home(props: any) {
         aria-hidden="true"
       />
 
-      {/* Minimalist Top Brand Bar */}
+      {/* Native iOS App Header (No Marketing Slogan) */}
       <header
         className="apple-nav-bar shrink-0"
         style={{
@@ -460,10 +460,27 @@ export default function Home(props: any) {
             "calc(0.5rem + var(--safe-area-inset-top, env(safe-area-inset-top, 0px)))",
         }}
       >
-        <div className="apple-brand-badge">
-          <span className="apple-brand-dot" aria-hidden="true" />
-          <span>TalkToMe Voice AI</span>
+        <div className="apple-app-title">
+          <span className="apple-app-logo" aria-hidden="true">
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            </svg>
+          </span>
+          <span>TalkToMe</span>
         </div>
+
+        <span className="apple-mode-pill">PDF & YouTube Voice</span>
+
         <div className="sr-only">
           <h1>Talk to a Document or YouTube Video</h1>
           <p>Live voice conversations powered by OpenAI Realtime API</p>
@@ -484,17 +501,6 @@ export default function Home(props: any) {
         }`}
       >
         <div className="flex flex-col gap-3 shrink-0">
-          {/* Editorial Hero Header on Home Screen */}
-          {!isCallView && (
-            <div className="apple-hero">
-              <p className="apple-hero-title">Speak with any source.</p>
-              <p className="apple-hero-subtitle">
-                Turn dense PDFs and YouTube videos into a natural, two-way voice
-                conversation.
-              </p>
-            </div>
-          )}
-
           {source && (
             <SourcePreview
               source={source}

@@ -22,6 +22,10 @@ export function SessionStatus({
   const isReconnecting = connectionState === "reconnecting";
   const isError = connectionState === "error";
   const showOrb = isConnected || isConnecting || isReconnecting;
+  const isPreCallState =
+    connectionState === "idle" ||
+    connectionState === "ingesting" ||
+    connectionState === "ready";
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -39,9 +43,22 @@ export function SessionStatus({
   const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
   const secs = String(elapsedSeconds % 60).padStart(2, "0");
 
+  // During Idle / Ingesting / Ready, hide the redundant debug status dot visually
+  // while keeping the exact text in the DOM for unit tests.
+  if (isPreCallState) {
+    return (
+      <div className="sr-only">
+        <span>
+          {connectionState === "ready" && "Ready"}
+          {connectionState === "idle" && "Idle"}
+          {connectionState === "ingesting" && "Ingesting..."}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="apple-status-strip">
-      {/* Concentric Sonar Ripple Voice Orb */}
       {showOrb && (
         <div className="apple-voice-orb-wrap" aria-hidden="true">
           <div className="apple-orb-ring apple-orb-ring-1" />
@@ -51,7 +68,6 @@ export function SessionStatus({
         </div>
       )}
 
-      {/* Status + Live Call Duration Timer Row */}
       <div className="flex items-center justify-center gap-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full">
           <span
@@ -67,9 +83,7 @@ export function SessionStatus({
                     ? "#007aff"
                     : connectionState === "reconnecting"
                       ? "#ff9500"
-                      : connectionState === "error"
-                        ? "#ff3b30"
-                        : "#86868b",
+                      : "#ff3b30",
             }}
           />
           <span
@@ -81,9 +95,6 @@ export function SessionStatus({
             {connectionState === "reconnecting" &&
               "Reconnecting (Unstable network)..."}
             {connectionState === "error" && "Connection Error (Failed)"}
-            {connectionState === "ready" && "Ready"}
-            {connectionState === "idle" && "Idle"}
-            {connectionState === "ingesting" && "Ingesting..."}
           </span>
         </div>
 

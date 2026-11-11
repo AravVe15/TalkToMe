@@ -92,12 +92,12 @@ export function SourceIngestion({
         </button>
       </div>
 
-      {/* Tab 1: Tactile Apple PDF Dropzone (Hides ugly native "no file selected") */}
+      {/* Tab 1: Native iOS Files Action Row (No dashed border, no visible native file input) */}
       <div className={activeTab === "pdf" ? "" : "tab-panel-inactive"}>
         <label htmlFor="pdf-upload" className="sr-only">
           Upload PDF Document
         </label>
-        <div className="apple-dropzone">
+        <div className="apple-file-row">
           <input
             id="pdf-upload"
             type="file"
@@ -107,10 +107,10 @@ export function SourceIngestion({
             className="apple-dropzone-input text-base"
             style={{ fontSize: "16px", minHeight: "44px" }}
           />
-          <div className="apple-dropzone-icon" aria-hidden="true">
+          <div className="apple-file-row-icon" aria-hidden="true">
             <svg
-              width="20"
-              height="20"
+              width="19"
+              height="19"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -118,22 +118,28 @@ export function SourceIngestion({
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
             </svg>
           </div>
-          <span
-            className="text-sm font-semibold truncate max-w-md"
-            style={{ color: "#1d1d1f", fontSize: "14px" }}
-          >
-            {selectedFileName ? selectedFileName : "Tap to choose a PDF file"}
-          </span>
-          <span
-            className="text-xs"
-            style={{ color: "#86868b", fontSize: "12px" }}
-          >
-            Up to 25 MB • Instant spatial text extraction
+          <div className="flex flex-col flex-1 min-w-0">
+            <span
+              className="text-sm font-semibold truncate"
+              style={{ color: "#1d1d1f", fontSize: "14px" }}
+            >
+              {selectedFileName ? selectedFileName : "Select PDF Document"}
+            </span>
+            <span
+              className="text-xs truncate"
+              style={{ color: "#86868b", fontSize: "12px" }}
+            >
+              {selectedFileName
+                ? "Tap to choose a different PDF"
+                : "Up to 25 MB • iOS Files or iCloud Drive"}
+            </span>
+          </div>
+          <span className="apple-file-row-badge" aria-hidden="true">
+            {selectedFileName ? "Change" : "Browse"}
           </span>
         </div>
       </div>
@@ -176,10 +182,11 @@ export function SourceIngestion({
       {isIngesting && (
         <div
           role="status"
-          className="p-2.5 rounded-xl text-xs text-center font-semibold animate-pulse"
+          className="flex items-center justify-center gap-2 p-2.5 rounded-xl text-xs font-semibold"
           style={{ background: "#f5f5f7", color: "#007aff" }}
         >
-          Extracting source content...
+          <span className="apple-spinner" aria-hidden="true" />
+          <span>Extracting source content...</span>
         </div>
       )}
 
@@ -189,7 +196,7 @@ export function SourceIngestion({
         disabled={!canStartVoiceChat}
         onClick={onStartVoiceChat}
         className="apple-primary-btn min-h-[44px] min-w-[44px]"
-        style={{ minHeight: "52px", minWidth: "44px" }}
+        style={{ minHeight: "50px", minWidth: "44px" }}
       >
         <svg
           width="17"

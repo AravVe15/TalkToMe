@@ -1156,6 +1156,33 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero reads or access to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
 
+## Session: 2026-11-11 (Implementer — Fix File Input Opacity Glitch & Native iOS App Layout)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Applied verbatim fixes across 4 files:
+  1. `src/app/globals.css`:
+     - Scoped `input:disabled` opacity to exclude `.apple-dropzone-input` (`input:disabled:not(.apple-dropzone-input)`) and forced `opacity: 0 !important; color: transparent !important;` on `.apple-dropzone-input:disabled` so the native file input button never becomes visible when disabled during extraction.
+     - Styled native iOS Files action row (`.apple-file-row`, `.apple-file-row-icon`, `.apple-file-row-badge`) replacing dashed web dropzone.
+     - Styled native iOS app navigation bar (`.apple-app-title`, `.apple-app-logo`, `.apple-mode-pill`) and clean inline spinner (`.apple-spinner`).
+  2. `src/app/page.tsx`:
+     - Replaced marketing hero banner with native iOS app header ("TalkToMe" title with mic logo squircle and "PDF & YouTube Voice" mode pill).
+  3. `src/components/SourceIngestion.tsx`:
+     - Implemented solid iOS Files action row (`.apple-file-row`) with document icon, filename state, and "Browse" / "Change" pill badge.
+     - Added inline spinner during ingestion (`.apple-spinner`).
+  4. `src/components/SessionStatus.tsx`:
+     - Hidden redundant pre-call status labels ("Ready", "Idle", "Ingesting...") visually into `.sr-only` containers, eliminating UI clutter on the home screen while preserving DOM accessibility for unit tests.
+- **Verification**:
+  - `npm run typecheck`: **PASS** (0 errors).
+  - `npm run lint`: **PASS** (0 warnings, 0 errors).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: **PASS** (27/27 passed).
+  - `npm test`: **PASS** (285 passed, 2 acknowledged expected test divergences).
+- **Strict Boundary Adherence**:
+  - Replaced the exact 4 files verbatim.
+  - Zero edits to `tests/` or backend/realtime library files.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
 
 
 

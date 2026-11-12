@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import type {
   RealtimeConnectionState,
   RealtimeConversationState,
@@ -37,16 +37,73 @@ export function SessionStatus({
   const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
   const secs = String(elapsedSeconds % 60).padStart(2, "0");
 
-  const visualOrbState = isConnected ? conversationState : connectionState;
+  const visualState = isConnected ? conversationState : connectionState;
+
+  const orbRef = useRef<HTMLDivElement | null>(null);
+  const ring1Ref = useRef<HTMLDivElement | null>(null);
+  const ring2Ref = useRef<HTMLDivElement | null>(null);
+  const ring3Ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+    const startTime = performance.now();
+
+    const isFastPulse =
+      visualState === "ingesting" ||
+      visualState === "connecting" ||
+      visualState === "reconnecting" ||
+      visualState === "assistant_thinking";
+    const isAudioDriven =
+      visualState === "user_speaking" || visualState === "assistant_speaking";
+
+    const tick = (now: number) => {
+      const elapsed = (now - startTime) / 1000;
+
+      if (orbRef.current && !isAudioDriven) {
+        const speed = isFastPulse ? 4.2 : 2.1;
+        const amplitude = isFastPulse ? 0.065 : 0.04;
+        const scale = 1 + amplitude * (0.5 + 0.5 * Math.sin(elapsed * speed));
+        orbRef.current.style.transform = `scale(${scale.toFixed(4)})`;
+      } else if (orbRef.current && isAudioDriven) {
+        orbRef.current.style.transform = "scale(var(--orb-scale, 1.06))";
+      }
+
+      const rings = [ring1Ref.current, ring2Ref.current, ring3Ref.current];
+      const cycleDuration = isFastPulse ? 2.0 : 3.2;
+      rings.forEach((ring, idx) => {
+        if (!ring) return;
+        const phase =
+          ((elapsed + idx * (cycleDuration / 3)) % cycleDuration) / cycleDuration;
+        const ringScale = 0.92 + phase * 0.55;
+        // Clamp minimum opacity to 0.06 so WebKit never zero-opacity-culls the ring
+        const ringOpacity = Math.max(0.06, Math.sin(phase * Math.PI) * 0.42);
+        ring.style.transform = `scale(${ringScale.toFixed(4)})`;
+        ring.style.opacity = ringOpacity.toFixed(3);
+      });
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [visualState]);
 
   return (
     <div className="apple-status-strip">
       {/* Always-Alive Voice Orb on the Upper Stage */}
-      <div className="apple-voice-orb-wrap" aria-hidden="true">
-        <div className="apple-orb-ring apple-orb-ring-1" />
-        <div className="apple-orb-ring apple-orb-ring-2" />
-        <div className="apple-orb-ring apple-orb-ring-3" />
-        <div className="apple-voice-orb" data-state={visualOrbState} />
+      <div
+        className="apple-voice-orb-wrap"
+        data-state={visualState}
+        aria-hidden="true"
+      >
+        <div ref={ring1Ref} className="apple-orb-ring apple-orb-ring-1" />
+        <div ref={ring2Ref} className="apple-orb-ring apple-orb-ring-2" />
+        <div ref={ring3Ref} className="apple-orb-ring apple-orb-ring-3" />
+        <div ref={orbRef} className="apple-voice-orb" data-state={visualState} />
       </div>
 
       {/* Contextual Stage Headline (Pre-Call vs In-Call) */}

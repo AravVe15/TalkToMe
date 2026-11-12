@@ -377,6 +377,47 @@ This document captures operational gotchas, environment quirks, and technical in
 - **Post-Send Keyboard Dismissal**:
   - Explicitly calling `inputRef.current?.blur()` on message submit dismisses the iOS software keyboard, immediately restoring the full viewport stage for audio conversation.
 
+---
+
+## 36. WebKit Initial-Load Invisibility Until Scroll/Touch: Why GPU Locks Fail & Actual Root Causes
+
+- **Why Standard CSS Hardware-Acceleration Fixes (`translateZ(0)`, `translate3d(0,0,0)`, `backface-visibility: hidden`) Fail**:
+  - In WebKit, elements with infinite `@keyframes` manipulating `transform` (`.apple-voice-orb`, `.apple-orb-ring`) are automatically promoted to the off-thread CoreAnimation compositor on Frame 0.
+  - If the parent container's layout geometry or clip rect is transiently `0×0` or unsettled on Frame 0, WebKit's `RenderLayerBacking` skips rasterizing the bitmap (`CABackingStore`) and hands a **blank texture** to CoreAnimation. Because `transform` animations run purely on the compositor thread without triggering main-thread repaints, the element animates an invisible `0×0` texture indefinitely until a user scroll/touch invalidates tile coverage. Forcing `translate3d(0,0,0)` on Frame 0 merely locks in that empty backing store earlier.
+- **Actual Root Cause 1: `overflow-x: hidden` Implicit Scroll Container + `min-h-dvh` + `flex: 1 1 0%` Cold-Launch Collapse**:
+  - Per CSS Overflow Level 3, setting `overflow-x: hidden` on `<main>` (`min-h-dvh overflow-x-hidden`) forces computed `overflow-y: auto`, turning `<main>` into a nested scroll container with `height: auto`.
+  - On iOS Safari cold launch, `100dvh` and `env(safe-area-inset-*)` settle asynchronously (`apple-web-app` skill). Inside an `auto`-height flex container, `.apple-upper-stage { flex: 1 1 0% }` (`flex-basis: 0%`) and `.apple-bottom-sheet-wrap { margin-top: auto }` cause WebKit's sub-scroller tile culler (`TileController`) to miscalculate the initial visible rect until a touch/scroll event forces a scrollport geometry update.
+  - *Remediation*: Replace `overflow-x: hidden` with `overflow-x: clip` (which clips horizontal overflow without creating a scroll container or forcing `overflow-y: auto`), change `.apple-upper-stage` from `flex: 1 1 0%` to `flex: 1 0 auto`, and include `-webkit-fill-available` / `100vh` fallbacks.
+- **Actual Root Cause 2: `position: sticky` + `backdrop-filter: blur()` Inside a Sub-Scroller Clipping Root**:
+  - Placing `.apple-nav-bar` (`position: sticky; backdrop-filter: blur(16px)`) inside an `overflow-x: hidden` (`overflow-y: auto`) `<main>` binds the sticky element and its backdrop-sampling root to `<main>` rather than the document viewport, causing WebKit to defer painting sibling layers inside the same backdrop root until scroll invalidation.
+- **Actual Root Cause 3: Off-Thread CSS `@keyframes` (`CAAnimation`) + Ancestor `data-*` Attribute Mutation Freeze & Disappear Bug**:
+  - When `overflow-x: clip` and `flex: 1 0 auto` were applied and CSS `@keyframes` were delayed by 2 frames via `el.setAttribute("data-hydrated", "true")`, the orb rendered visibly on Frame 0–1, started pulsing, and then **froze and disappeared until the screen was touched**.
+  - Four interacting mechanisms caused this:
+    1. **WebKit Off-Thread `CAAnimation` Desync on Ancestor `[data-*]` Mutation**: Mutating `data-hydrated` / `data-keyboard-open` / `data-connection-state` on `<main>` invalidates descendant styles matched by `main[data-*] ...` selectors while off-thread CoreAnimation `transform` animations (`appleOrbBreathe`, `appleSonarRipple`, `appleOrbPulseFast`) are running on `will-change: transform; backface-visibility: hidden; translate3d(0,0,0)` layers. WebKit's compositor drops the `CABackingStore` tile until a touch/scroll event forces a compositor flush.
+    2. **CSS `animation` Shorthand Specificity Clobber**: `main[data-hydrated="true"] .apple-orb-ring { animation: appleSonarRipple ... }` (specificity `0,2,1`) overrode `.apple-orb-ring-2` and `.apple-orb-ring-3` (`0,1,0`) `animation-delay`, resetting all 3 rings to `0s` delay so all rings animated together to `100% { opacity: 0 }` and vanished.
+    3. **Unpositioned `position: absolute` Flex Children**: `.apple-orb-ring` used `position: absolute` inside `.apple-voice-orb-wrap` (`display: flex`) without explicit `inset: 0; margin: auto;`, relying on Flexbox static-position inference which breaks in WebKit when promoted to a 3D composited layer.
+    4. **Main-Thread `transition: background, box-shadow` Colliding with Off-Thread `@keyframes`**: Transitioning non-interpolable `linear-gradient` backgrounds and `box-shadow` on `.apple-voice-orb` while swapping `@keyframes` across state changes (`idle` -> `ingesting` -> `ready` when `<SourcePreview />` mounts above `.apple-upper-stage`) stalls WebKit's layer update.
+  - *Definitive Solution*:
+    - Eliminate all off-thread CSS `@keyframes` (`appleOrbBreathe`, `appleOrbPulseFast`, `appleSonarRipple`), `main[data-hydrated]` selectors, and `translate3d(0,0,0)` / `backface-visibility: hidden` / `will-change: transform` GPU-promotion hacks on `.apple-voice-orb` and `.apple-orb-ring`.
+    - Drive the idle/ingesting/ready orb breathing and concentric sonar ring ripples via a **Main-Thread `requestAnimationFrame` loop** in `SessionStatus.tsx` (using direct DOM ref style updates, matching `RealtimeAudioVisualizer`), which keeps the elements in WebKit's normal main-thread paint pipeline where layers never detach or freeze.
+    - Explicitly position `.apple-orb-ring` with `inset: 0; margin: auto;` and clamp minimum ring opacity above `0.05` so WebKit never zero-opacity-culls the rings.
+    - In `page.tsx`, guard `data-keyboard-open` updates so the attribute is only mutated when the boolean state actually changes, and trigger a synchronous layout/paint flush (`void mainRef.current.offsetHeight`) when `source` or `connectionState` changes so `<SourcePreview />` (`.apple-top-source-bar`) paints immediately on mount.
+
+---
+
+## 37. iOS Safari Virtual Keyboard Layout Thrashing & Animation Continuity
+
+- **Why the Virtual Keyboard Generates Phantom Space on iOS Safari**:
+  - On iOS Safari, the virtual keyboard does not resize the layout viewport (`window.innerHeight`), only the `window.visualViewport`.
+  - When the keyboard appears, iOS automatically cancels the Home Indicator safe area at the bottom of the screen. If the sticky/fixed dock retains `padding-bottom: calc(0.5rem + env(safe-area-inset-bottom))`, the residual `~34px` padding creates an apparent gap above the keyboard.
+  - If JavaScript tries to fix this by modifying `el.style.height = `${vv.height}px`` or applying `translateY(-${keyboardHeight}px)` on every visualViewport `resize`/`scroll` event, it forces synchronous reflows (layout thrashing) 60 times during the 300ms keyboard animation, freezing any concurrent JavaScript or CSS animations.
+- **Why Main-Thread Animation Loops Experience a "Slight Freeze"**:
+  - In `requestAnimationFrame` effects keyed to `[visualState]`, changing states unmounts the old RAF and restarts with `const startTime = performance.now()`. Resetting `elapsed = 0` causes a phase discontinuity (visual jump/stutter).
+  - Calling synchronous forced reflows (`void el.offsetHeight`) blocks the main thread for one frame while WebKit recalculates styles.
+- **Should You Let a Minor Micro-Stutter Go?**:
+  - The critical P0 defect was **elements disappearing / remaining invisible until user touch**. Once elements remain continuously visible and functional, a 50–100ms micro-stutter during cold load or keyboard deployment is standard mobile web behavior and completely acceptable for submission.
+
+
 
 
 

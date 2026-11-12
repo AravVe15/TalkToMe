@@ -154,23 +154,34 @@ export default function Home(props: any) {
     };
   }, []);
 
+  // Force a synchronous layout/paint flush when source or connectionState changes
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    void el.offsetHeight;
+  }, [connectionState, source]);
+
   // True iOS Safari VisualViewport Container Resizing (Zero phantom gap under text bar)
   useEffect(() => {
     if (typeof window === "undefined" || !window.visualViewport) {
       return;
     }
     const vv = window.visualViewport;
+    let wasKeyboardOpen = false;
     const handleViewportChange = () => {
       const el = mainRef.current;
       if (!el) return;
       const keyboardHeight = window.innerHeight - vv.height;
-      if (keyboardHeight > 60) {
-        el.setAttribute("data-keyboard-open", "true");
+      const isKeyboardOpen = keyboardHeight > 60;
+      if (isKeyboardOpen !== wasKeyboardOpen) {
+        wasKeyboardOpen = isKeyboardOpen;
+        el.setAttribute("data-keyboard-open", String(isKeyboardOpen));
+      }
+      if (isKeyboardOpen) {
         el.style.height = `${vv.height}px`;
         el.style.maxHeight = `${vv.height}px`;
         window.scrollTo(0, 0);
       } else {
-        el.setAttribute("data-keyboard-open", "false");
         el.style.height = "";
         el.style.maxHeight = "";
       }

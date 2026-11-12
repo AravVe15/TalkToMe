@@ -50,6 +50,11 @@ This document records the use of AI-assisted tools and models throughout the lif
 | 2026-11-10 | iOS 18 Micro-Interactions & Form Polish | Implementer | Gemini 3.8 Flash (High) | Polished inner elements across `SessionStatus.tsx` (voice-wave speaking badges, gradient reconnect), `SourcePreview.tsx` (pill disclosure button, 180px preview box), and `SourceIngestion.tsx` (rounded input borders, gradient CTAs). | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`) | Updated `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, `src/components/SourceIngestion.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
 | 2026-11-10 | Comprehensive Architectural & Technical Audit | Reviewer | Gemini 3.8 Flash (High) | Conducted comprehensive, read-only architectural audit and verification (`typecheck`, `lint`, and full test suite analysis); audited security and secret isolation; analyzed 4 unit test divergences stemming from recent AEC, VAD, model, and UI upgrades; generated full Project Scope & Architecture Summary. | `read_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npm test`, `git status`, `git log`) | Updated `docs/memory/ai-usage-log.md`; formulated comprehensive 8-section Project Scope & Architecture Summary. |
 | 2026-11-11 | iOS Keyboard Gap, WebKit Orb Compositing & Top-Pinned SourcePreview | Implementer | Gemini 3.8 Flash (High) | Applied verbatim patch to globals.css, page.tsx, and SessionControls.tsx to eliminate the iOS keyboard gap with VisualViewport container sizing, fix WebKit orb drops with hardware layer compositing, anchor source preview below header, and blur input on submit. Verified typecheck, lint, and all 27 UI tests pass. | `write_file`, `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npm test`, `npx vitest`) | Updated `src/app/globals.css`, `src/app/page.tsx`, `src/components/SessionControls.tsx`, `docs/memory/lessons-learned.md`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-11 | WebKit Initial-Load Invisibility Root-Cause Analysis & Diagnostic Plan | Planner | Gemini 4 Argon (High) | Analyzed why standard CSS GPU hardware-acceleration locks failed to resolve initial-load invisibility of the Voice Orb and PDF/YouTube source cards until scroll/touch. Identified 4 interacting root causes (`overflow-x: hidden` implicit `overflow-y: auto` sub-scroller + `min-h-dvh` / `flex: 1 1 0%` cold-launch geometry collapse, off-thread CoreAnimation blank texture lock on Frame 0, `position: sticky` + `backdrop-filter` capture root conflict, and post-hydration `visualViewport` mount sync timing). Documented findings in `lessons-learned.md` (§36) and formulated diagnostic steps and CSS/React solutions. | `read_file`, `edit_file`, `run_command` (`git status`, `git diff`, `git log`), `search_web` | Updated `docs/memory/lessons-learned.md` (§36) and `docs/memory/ai-usage-log.md`; delivered root-cause analysis, diagnostic steps, and remediation blueprint. |
+| 2026-11-11 | WebKit Initial-Load Invisibility Implementation | Implementer | Gemini 3.8 Flash (High) | Implemented §36 WebKit initial-load invisibility resolution: replaced overflow-x: hidden with overflow-x: clip, removed root isolation: isolate, stabilized min-height with -webkit-fill-available, changed upper stage to flex: 1 0 auto, isolated nav bar backdrop-filter via translateZ(0), gated infinite orb/ripple @keyframes behind data-hydrated="true", executed mount visualViewport sync, and added double-rAF post-hydration paint promotion in page.tsx. Verified typecheck, lint, and all 27 UI tests pass. | `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npx vitest`) | Updated `src/app/globals.css`, `src/app/page.tsx`, and `docs/memory/ai-usage-log.md`. |
+| 2026-11-11 | WebKit Orb & Card Freeze/Disappear Main-Thread rAF Migration | Implementer | Gemini 3.8 Flash (High) | Resolved WebKit freeze/disappear bug by eliminating off-thread CSS @keyframes, anchoring orb rings with inset: 0 / margin: auto, removing GPU layer promotion traps from orb/nav bar/source bar, driving orb and ring breathing via a Main-Thread requestAnimationFrame loop in SessionStatus, removing data-hydrated, gating data-keyboard-open mutations, and adding a synchronous layout flush on source/connectionState changes in page.tsx. Verified typecheck, lint, and all 27 UI tests pass. | `edit_file`, `run_command` (`npm run typecheck`, `npm run lint`, `npx vitest`) | Updated `src/app/globals.css`, `src/components/SessionStatus.tsx`, `src/app/page.tsx`, and `docs/memory/ai-usage-log.md`. |
+
+
 
 
 *(Subsequent agent sessions must append their entries to this table before concluding their turn.)*
@@ -1236,6 +1241,94 @@ This document records the use of AI-assisted tools and models throughout the lif
   - Zero edits to `tests/` or any other files.
   - Zero reads or access to `.env` or any `.env*` files.
   - Zero git commits or pushes executed.
+
+## Session: 2026-11-11 (Planner — WebKit Initial-Load Invisibility Root-Cause Analysis & Diagnostic Plan)
+- **Agent**: `planner`
+- **Model**: Gemini 4 Argon (High)
+- **Task**: Investigated why the CSS-animated Voice Orb (`.apple-voice-orb-wrap` / `.apple-voice-orb`) and PDF/YouTube source header/sheet cards are invisible on initial page load until a viewport scroll/touch interaction, and why standard CSS GPU compositing locks (`isolation: isolate` removal, `will-change: transform` removal, `translateZ(0)` / `translate3d(0,0,0)`, `-webkit-backface-visibility: hidden`) failed.
+- **Rationale**: Traced the bug across `src/app/page.tsx`, `src/app/globals.css`, `src/app/layout.tsx`, `src/components/SessionStatus.tsx`, `src/components/SourcePreview.tsx`, and `src/components/SourceIngestion.tsx`, correlating with `apple-web-app` references and WebKit Bugzilla (#260981 / #236566). Identified 4 interacting root causes and recorded Lesson Learned §36 in `docs/memory/lessons-learned.md`.
+
+## Session: 2026-11-11 (Implementer — WebKit Initial-Load Invisibility Implementation)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Implemented the architectural fix for the WebKit / iOS Safari initial-load invisibility bug per §36:
+  1. `src/app/globals.css`:
+     - Added `overflow-x: clip` to `.overflow-x-hidden` to avoid computed `overflow-y: auto` and prevent sub-scroller creation.
+     - Removed `isolation: isolate` from `main, .min-h-dvh`.
+     - Added `min-height: -webkit-fill-available` to `.min-h-dvh`.
+     - Changed `.apple-upper-stage` from `flex: 1 1 0%` to `flex: 1 0 auto`.
+     - Added `transform: translateZ(0); -webkit-transform: translateZ(0)` to `.apple-nav-bar` to isolate its `backdrop-filter: blur(16px)` layer.
+     - Gated `appleSonarRipple` and `appleOrbBreathe` infinite `@keyframes` animations behind `main[data-hydrated="true"]`.
+     - Removed `will-change: transform`, `backface-visibility: hidden`, and `transition: transform` from `.apple-voice-orb-wrap`.
+  2. `src/app/page.tsx`:
+     - Called `handleViewportChange()` immediately upon mount in the `window.visualViewport` `useEffect`.
+     - Added a mount `useEffect` executing a forced synchronous layout read (`void el.offsetHeight`) and double-`requestAnimationFrame` ticks to set `data-hydrated="true"`.
+- **Verification**:
+  - `npm run typecheck`: **PASS** (0 errors).
+  - `npm run lint`: **PASS** (0 warnings, 0 errors).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: **PASS** (27/27 UI tests passed).
+- **Strict Boundary Adherence**:
+  - Zero edits to `tests/` or config files.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-11 (Planner — Follow-Up Forensic Diagnosis: Off-Thread CSS `@keyframes` Freeze & Disappear on `data-hydrated` Activation)
+- **Agent**: `planner`
+- **Model**: Claude Opus 4.6 (Thinking)
+- **Task**: Diagnosed why the initial `main[data-hydrated="true"]` patch caused the Voice Orb pulsing to start, freeze, and disappear until the screen is touched:
+  1. **Empirical Breakthrough**: Because delaying `@keyframes` by 2 frames via `data-hydrated="true"` made the orb visible on Frame 0–1 and then froze/vanished at the exact frame `data-hydrated="true"` activated the CSS `@keyframes`, this proved that `overflow-x: clip` + `flex: 1 0 auto` fixed the initial layout geometry, and isolated the remaining bug 100% to **WebKit's off-thread CSS `@keyframes` (`CAAnimation`) compositor layer handoff and ancestor `[data-*]` attribute mutation invalidation**.
+  2. **Identified Four Specific Defects in the Previous Patch**:
+     - `main[data-hydrated="true"] .apple-orb-ring { animation: ... }` (specificity `0,2,1`) used the `animation` shorthand with higher specificity than `.apple-orb-ring-2/3` (`0,1,0`), clobbering `animation-delay: 0.9s` / `1.8s` back to `0s` and causing all 3 rings to animate in lockstep to `opacity: 0` and vanish.
+     - Mutating `data-hydrated` and `data-keyboard-open` on `<main>` after mount triggered WebKit's ancestor `[data-*]` selector compositing desync on child `will-change: transform; backface-visibility: hidden; translate3d(0,0,0)` layers.
+     - `.apple-orb-ring` used `position: absolute` inside a flex container without explicit `inset: 0; margin: auto;`.
+     - `.apple-voice-orb` combined main-thread `transition: background, box-shadow` (with non-interpolable `linear-gradient`s) with off-thread `@keyframes` swaps during `idle` -> `ingesting` -> `ready` transitions when `<SourcePreview />` mounts.
+  3. **Formulated Definitive Remediation Plan for `implementer`**:
+     - Replace off-thread CSS `@keyframes` (`appleOrbBreathe`, `appleOrbPulseFast`, `appleSonarRipple`) and GPU-layer promotion properties with a **Main-Thread `requestAnimationFrame` loop** in `SessionStatus.tsx` (matching `RealtimeAudioVisualizer`'s proven architecture), explicit `inset: 0; margin: auto;` ring positioning, guarded `data-keyboard-open` updates, and a synchronous layout flush on `[connectionState, source]` transitions in `page.tsx`.
+- **Strict Boundary Adherence**:
+  - Read-only on `src/`, `tests/`, and config files; updated `docs/memory/lessons-learned.md` and `docs/memory/ai-usage-log.md`.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-11 (Planner — iOS Keyboard Gap Analysis & Evaluation Recommendation)
+- **Agent**: `planner`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Analyzed user's inquiry regarding the iOS Safari virtual keyboard gap issue, the layout thrashing mechanics behind the slight animation freeze, and evaluated whether to accept the current minor micro-stutter:
+  1. **Explained Why iOS Safari Generates Space**: When the virtual keyboard opens, iOS shrinks `window.visualViewport` but not layout viewport (`window.innerHeight`), and cancels the Home Indicator safe area (`env(safe-area-inset-bottom)`). Retaining safe-area padding or modifying `el.style.height = `${vv.height}px`` forces synchronous layout thrashing that freezes animations.
+  2. **Identified the Minor Stutter Cause**: In `SessionStatus.tsx`, resetting `startTime` on `visualState` changes causes an animation phase jump, while `void el.offsetHeight` forces a synchronous reflow.
+  3. **Product & Submission Recommendation**: Advised the user to let it go. The critical P0 blocker was the disappearing UI. With elements continuously visible and responsive, a 50–100ms micro-stutter on mobile is normal and fully acceptable.
+- **Strict Boundary Adherence**:
+  - Read-only on `src/`, `tests/`, and config files.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+## Session: 2026-11-11 (Implementer — WebKit Orb & Card Freeze/Disappear Main-Thread rAF Migration)
+- **Agent**: `implementer`
+- **Model**: Gemini 3.8 Flash (High)
+- **Task**: Resolved the WebKit orb/card freeze-and-disappear bug across 3 files:
+  1. `src/app/globals.css`:
+     - Anchored `.apple-orb-ring` explicitly with `inset: 0; margin: auto;` and updated ring dimensions (112px, 136px, 162px).
+     - Removed all off-thread `@keyframes` rules (`appleSonarRipple`, `appleOrbBreathe`, `appleOrbPulseFast`) and GPU promotion traps (`will-change`, `backface-visibility`, `translate3d`).
+     - Kept clean border-color overrides for `user_speaking` and `assistant_speaking`.
+     - Removed `transform: translateZ(0)` from `.apple-nav-bar` and `z-index: 15` from `.apple-top-source-bar`.
+     - Preserved state-driven color overrides on `.apple-voice-orb` without CSS animations or transforms (except scale on `user_speaking`/`assistant_speaking`).
+  2. `src/components/SessionStatus.tsx`:
+     - Added `useRef` for `orbRef`, `ring1Ref`, `ring2Ref`, `ring3Ref`.
+     - Implemented a Main-Thread `requestAnimationFrame` loop that drives orb breathing (2.1 Hz / 4.2 Hz) and concentric ring expansion with minimum 0.06 opacity clamping to prevent WebKit tile culling.
+  3. `src/app/page.tsx`:
+     - Removed the temporary `data-hydrated` `useEffect`.
+     - In `window.visualViewport` effect, guarded `data-keyboard-open` attribute mutation to only execute when keyboard open state changes (`isKeyboardOpen !== wasKeyboardOpen`), omitting synchronous mount call.
+     - Added synchronous layout read (`void el.offsetHeight`) watching `[connectionState, source]` to immediately paint mounting cards.
+- **Verification**:
+  - `npm run typecheck`: **PASS** (0 errors).
+  - `npm run lint`: **PASS** (0 warnings, 0 errors).
+  - `npx vitest run tests/unit/ui/app-ui.test.ts`: **PASS** (27/27 UI tests passed).
+- **Strict Boundary Adherence**:
+  - Zero edits to `tests/` or protected project configs.
+  - Zero reads or access to `.env` or any `.env*` files.
+  - Zero git commits or pushes executed.
+
+
+
 
 
 

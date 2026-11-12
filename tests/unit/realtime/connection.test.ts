@@ -148,7 +148,7 @@ describe("Slice 3A: WebRTC Connection & Audio Transport (AC-06, AC-10)", () => {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: false,
+          autoGainControl: true,
         },
       });
 

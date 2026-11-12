@@ -6,6 +6,12 @@
       "sourceType": "github",
       "skillPath": "skills/apple-web-app/SKILL.md",
       "computedHash": "b3af36dbaf06db849c05edb099e8a07843f51b8e400c2f6440e6313ba9355386"
+    },
+    "crafting-effective-readmes": {
+      "source": "softaworks/agent-toolkit",
+      "sourceType": "github",
+      "skillPath": "skills/crafting-effective-readmes/SKILL.md",
+      "computedHash": "cb11facecbb4a15f7ca6cfac2e740ac66798676c246c057879a71babb27c9a4f"
     }
   }
 }

@@ -363,7 +363,7 @@ TalktToMe/
 
 ---
 
-## Project Status
+## License
 
 **TalkToMe** is an original technical demonstration engineered by **Arav Verma** for
     candidate evaluation. All rights reserved.

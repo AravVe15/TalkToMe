@@ -363,6 +363,7 @@ TalktToMe/
 
 ---
 
-## License
+## Project Status
 
-This project is licensed under the MIT License.
+**TalkToMe** is an original technical demonstration engineered by **Arav Verma** for
+    candidate evaluation. All rights reserved.
